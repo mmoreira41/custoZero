@@ -8,12 +8,14 @@ export function Landing() {
   const isDevelopment = !import.meta.env.VITE_SUPABASE_URL;
 
   const handleStartDiagnostic = () => {
-    // TODO: Redirecionar para checkout Kiwify em produção
-    // window.location.href = 'https://pay.kiwify.com.br/SEU_LINK_AQUI';
-
-    // Para desenvolvimento/testes, usar token dev (bypassa validação)
-    const devToken = 'dev-' + Date.now();
-    window.location.href = `/diagnostico?token=${devToken}`;
+    if (isDevelopment) {
+      // Desenvolvimento: usar token dev (bypassa validação)
+      const devToken = 'dev-' + Date.now();
+      window.location.href = `/diagnostico?token=${devToken}`;
+    } else {
+      // Produção: redirecionar para checkout Kiwify
+      window.location.href = 'https://pay.kiwify.com.br/N9qXUaf';
+    }
   };
 
   const handleDevMode = () => {
