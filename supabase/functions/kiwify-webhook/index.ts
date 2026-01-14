@@ -10,23 +10,42 @@ const corsHeaders = {
 };
 
 interface KiwifyWebhookPayload {
-  event: 'order.paid' | 'order.refunded' | 'order.cancelled';
-  order_id: string;
-  customer: {
+  // Formato do Kiwify (campos no nível raiz)
+  order_id?: string;
+  order_status?: string;
+  webhook_event_type?: string;
+  Customer?: {
+    email: string;
+    full_name: string;
+    first_name?: string;
+    mobile?: string;
+  };
+  Product?: {
+    product_id: string;
+    product_name: string;
+  };
+  Commissions?: {
+    charge_amount: number;
+    product_base_price_currency: string;
+  };
+
+  // Formato alternativo (compatibilidade)
+  event?: 'order.paid' | 'order.refunded' | 'order.cancelled';
+  customer?: {
     email: string;
     name: string;
     phone?: string;
   };
-  product: {
+  product?: {
     id: string;
     name: string;
   };
-  amount: number;
-  currency: string;
-  created_at: string;
+  amount?: number;
+  currency?: string;
+  created_at?: string;
   metadata?: Record<string, unknown>;
 
-  // Campos alternativos (compatibilidade)
+  // Campos alternativos
   email?: string;
   transaction_id?: string;
   status?: string;
@@ -93,7 +112,7 @@ async function sendWelcomeEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'CustoZero <noreply@custozero.com.br>',
+        from: 'CustoZero <onboarding@resend.dev>',
         to: email,
         subject: '🎉 Seu diagnóstico financeiro está pronto!',
         html: `
@@ -184,12 +203,53 @@ serve(async (req) => {
 
     // Parse do payload do webhook
     const rawBody = await req.text();
-    const payload: KiwifyWebhookPayload = JSON.parse(rawBody);
+    let payload: KiwifyWebhookPayload = JSON.parse(rawBody);
+
+    // Log do payload completo para debug
+    console.log('📦 Raw payload:', JSON.stringify(payload, null, 2));
+
+    // Normalizar campos (suportar formato Kiwify e outros formatos)
+    let event: string;
+    let orderId: string | undefined;
+    let customerEmail: string | undefined;
+    let customerName: string;
+    let productName: string;
+
+    // Verificar se é formato Kiwify (campos no nível raiz com Customer e webhook_event_type)
+    if (payload.webhook_event_type && payload.Customer) {
+      // Formato do Kiwify (campos no nível raiz)
+      const webhookEventType = payload.webhook_event_type;
+
+      // Mapear webhook_event_type para nosso formato interno
+      if (webhookEventType === 'order_approved' || payload.order_status === 'paid') {
+        event = 'order.paid';
+      } else if (webhookEventType === 'order_refunded') {
+        event = 'order.refunded';
+      } else if (webhookEventType === 'order_cancelled') {
+        event = 'order.cancelled';
+      } else {
+        event = 'unknown';
+      }
+
+      orderId = payload.order_id;
+      customerEmail = payload.Customer.email;
+      customerName = payload.Customer.full_name || payload.Customer.first_name || 'Cliente';
+      productName = payload.Product?.product_name || 'Produto';
+    } else {
+      // Formato alternativo (compatibilidade)
+      event = payload.event || (payload.status === 'paid' || payload.status === 'approved' ? 'order.paid' : 'unknown');
+      orderId = payload.order_id || payload.transaction_id;
+      customerEmail = payload.customer?.email || payload.email;
+      customerName = payload.customer?.name || payload.customer_name || 'Cliente';
+      productName = payload.product?.name || 'Produto';
+    }
 
     console.log('📥 Kiwify webhook received:', {
-      event: payload.event,
-      order_id: payload.order_id,
-      email: payload.customer?.email || payload.email,
+      event,
+      order_id: orderId,
+      email: customerEmail,
+      name: customerName,
+      product: productName,
     });
 
     // Validar assinatura do webhook
@@ -208,12 +268,6 @@ serve(async (req) => {
         }
       );
     }
-
-    // Normalizar campos (suportar diferentes formatos)
-    const event = payload.event || (payload.status === 'paid' || payload.status === 'approved' ? 'order.paid' : 'unknown');
-    const orderId = payload.order_id || payload.transaction_id;
-    const customerEmail = payload.customer?.email || payload.email;
-    const customerName = payload.customer?.name || payload.customer_name || 'Cliente';
 
     // Processar apenas eventos de pagamento confirmado
     if (event !== 'order.paid') {
@@ -291,9 +345,10 @@ serve(async (req) => {
       );
     }
 
-    // Construir URL de redirecionamento
+    // Construir URLs
     const appUrl = Deno.env.get('APP_URL') || 'http://localhost:5173';
     const diagnosticUrl = `${appUrl}/diagnostico?token=${token}`;
+    const processingUrl = `${appUrl}/processando?email=${encodeURIComponent(customerEmail)}`;
 
     console.log('✅ Token created successfully:', {
       email: customerEmail,
@@ -302,7 +357,7 @@ serve(async (req) => {
       expires_at: expiresAt.toISOString(),
     });
 
-    // Enviar email com link de acesso
+    // Enviar email com link de acesso direto (fallback)
     try {
       await sendWelcomeEmail(customerEmail, customerName, diagnosticUrl, expiresAt);
     } catch (emailError) {
@@ -310,11 +365,11 @@ serve(async (req) => {
       // Não falhar a requisição se apenas o email falhar
     }
 
-    // Retornar sucesso
+    // Retornar sucesso com URL de processamento (novo fluxo com polling)
     return new Response(
       JSON.stringify({
         success: true,
-        redirect_url: diagnosticUrl,
+        redirect_url: processingUrl,
         token,
         expires_at: expiresAt.toISOString(),
       }),

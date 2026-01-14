@@ -3,12 +3,14 @@ import { Landing } from './pages/Landing';
 import { Questionnaire } from './pages/Questionnaire';
 import { Report } from './pages/Report';
 import { AccessDenied } from './pages/AccessDenied';
+import ProcessingLogin from './pages/ProcessingLogin';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/processando" element={<ProcessingLogin />} />
         <Route path="/diagnostico" element={<Questionnaire />} />
         <Route path="/relatorio" element={<Report />} />
         <Route path="/acesso-negado" element={<AccessDenied />} />

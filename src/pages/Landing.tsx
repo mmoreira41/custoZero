@@ -13,8 +13,8 @@ export function Landing() {
       const devToken = 'dev-' + Date.now();
       window.location.href = `/diagnostico?token=${devToken}`;
     } else {
-      // Produção: redirecionar para checkout Kiwify
-      window.location.href = 'https://pay.kiwify.com.br/N9qXUaf';
+      // Produção: redirecionar para checkout Cakto
+      window.location.href = 'https://pay.cakto.com.br/rssnmc4_725942';
     }
   };
 
