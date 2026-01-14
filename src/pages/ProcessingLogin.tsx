@@ -13,7 +13,7 @@ export default function ProcessingLogin() {
 
   const [status, setStatus] = useState<'polling' | 'timeout' | 'error' | 'not-found'>('polling')
   const [timeElapsed, setTimeElapsed] = useState(0)
-  const [hasAnyToken, setHasAnyToken] = useState(false)
+  const [, setHasAnyToken] = useState(false)
 
   useEffect(() => {
     // Validate email parameter
