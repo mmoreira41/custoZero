@@ -1,107 +1,73 @@
 import { useNavigate } from 'react-router-dom'
-import { Clock, Zap, Shield, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { HeaderSection, PricingCard, FooterSection } from '@/components/upsell'
 
-const UPSELL_URL = 'https://pay.cakto.com.br/rssnmc4_725942'
-
-const benefits = [
-  {
-    icon: RefreshCw,
-    title: 'Diagnósticos ilimitados',
-    description: 'Refaça quantas vezes quiser por 30 dias',
-  },
-  {
-    icon: Zap,
-    title: 'Atualizações em tempo real',
-    description: 'Veja quanto está economizando',
-  },
-  {
-    icon: Shield,
-    title: 'Suporte prioritário',
-    description: 'Tire dúvidas quando precisar',
-  },
-]
+const PAYMENT_30_DAYS = 'https://pay.cakto.com.br/38wjsj6'
+const PAYMENT_LIFETIME = 'https://pay.cakto.com.br/3cppbz2'
 
 export default function AccessExpired() {
   const navigate = useNavigate()
 
-  const handleRenew = () => {
-    window.location.href = UPSELL_URL
+  const handleSelect30Days = () => {
+    window.location.href = PAYMENT_30_DAYS
+  }
+
+  const handleSelectLifetime = () => {
+    window.location.href = PAYMENT_LIFETIME
+  }
+
+  const handleAccessWithEmail = () => {
+    navigate('/acesso')
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
-          {/* Icon */}
-          <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Clock className="w-10 h-10 text-orange-500" />
-          </div>
+    <main className="min-h-screen bg-[#0A0A0A] relative overflow-hidden">
+      {/* Background gradient effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[150px]" />
+      </div>
 
-          {/* Title */}
-          <h1 className="text-2xl font-bold text-gray-900 mb-3">
-            Seu tempo expirou!
-          </h1>
-          <p className="text-gray-600 mb-6">
-            Seu passe livre de 24 horas chegou ao fim. Mas não precisa parar por aqui!
-          </p>
+      {/* Content */}
+      <div className="relative z-10 px-4 py-12 sm:py-16 max-w-lg mx-auto">
+        <HeaderSection />
 
-          {/* Price Card */}
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-6 mb-6">
-            <p className="text-sm font-medium text-green-700 mb-1">
-              Renove seu acesso por apenas
-            </p>
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <span className="text-4xl font-bold text-green-600">R$ 7</span>
-              <span className="text-gray-500 line-through text-lg">R$ 27</span>
-            </div>
-            <p className="text-sm text-green-600 font-medium">
-              Acesso ilimitado por 30 dias
-            </p>
-          </div>
+        {/* Pricing Cards */}
+        <div className="space-y-6">
+          {/* 30 Days - Most Popular */}
+          <PricingCard
+            title="Use uma vez"
+            price="R$ 7,90"
+            period="/ 30 dias"
+            description="Perfeito para quem quer testar o poder dos diagnósticos."
+            features={[
+              'Diagnósticos Ilimitados',
+              'Relatórios Detalhados',
+              '30 dias de acesso completo',
+            ]}
+            badge="Mais Popular"
+            onSelect={handleSelect30Days}
+          />
 
-          {/* Benefits */}
-          <div className="space-y-3 mb-6 text-left">
-            {benefits.map((benefit, index) => {
-              const Icon = benefit.icon
-              return (
-                <div key={index} className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Icon className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{benefit.title}</p>
-                    <p className="text-gray-500 text-xs">{benefit.description}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* CTA */}
-          <Button
-            onClick={handleRenew}
-            size="lg"
-            className="w-full py-6 text-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 mb-3"
-          >
-            Renovar Agora
-          </Button>
-
-          <Button
-            onClick={() => navigate('/')}
-            variant="ghost"
-            className="w-full"
-          >
-            Voltar ao Início
-          </Button>
+          {/* Lifetime - Premium */}
+          <PricingCard
+            title="Acesso Vitalício"
+            price="R$ 47"
+            description="Pagamento único. Economia para sempre."
+            features={[
+              'Diagnósticos Ilimitados',
+              'Selo de Acesso Vitalício',
+              'Suporte Prioritário',
+              'Todas as atualizações futuras',
+            ]}
+            badge="Melhor Custo-Benefício"
+            isPremium
+            onSelect={handleSelectLifetime}
+          />
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-gray-500 mt-4">
-          Pagamento seguro via Cakto. Acesso imediato após a confirmação.
-        </p>
+        <FooterSection onAccessWithEmail={handleAccessWithEmail} />
       </div>
-    </div>
+    </main>
   )
 }

@@ -12,7 +12,6 @@ export type CategoryId =
   | 'games'
   | 'fitness'
   | 'transporte'
-  | 'financeiro'
   | 'extras';
 
 export interface ServicePlan {

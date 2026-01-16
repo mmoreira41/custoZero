@@ -34,7 +34,7 @@ export function Report() {
       // Manter o token do localStorage para permitir refazer durante 24h
       const token = localStorage.getItem('custozero_token');
       if (token) {
-        navigate(`/welcome?token=${token}`);
+        navigate(`/diagnostico?token=${token}`);
       } else {
         navigate('/acesso');
       }

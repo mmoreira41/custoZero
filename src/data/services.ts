@@ -410,15 +410,6 @@ export const marketplacesServices: Service[] = [
     ]
   },
   {
-    id: 'mercado-livre',
-    name: 'Mercado Livre Premium',
-    logo: 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/5.21.22/mercadolibre/logo__large_plus.png',
-    avgPriceMin: 18,
-    avgPriceMax: 25,
-    howToCancel: 'Minha conta > Assinaturas > Cancelar',
-    cancelUrl: 'https://www.mercadolivre.com.br/subs/subscriptions'
-  },
-  {
     id: 'magazine-luiza',
     name: 'Magalu Benefícios',
     logo: 'https://unavatar.io/magazineluiza.com.br',
@@ -659,34 +650,6 @@ export const transporteServices: Service[] = [
   }
 ];
 
-// Financeiro Services
-export const financeiroServices: Service[] = [
-  {
-    id: 'inter-black',
-    name: 'Inter Black',
-    logo: 'https://unavatar.io/bancointer.com.br',
-    avgPriceMin: 15,
-    avgPriceMax: 25,
-    howToCancel: 'App > Conta Digital > Planos > Cancelar'
-  },
-  {
-    id: 'nubank-ultravioleta',
-    name: 'Nubank Ultravioleta',
-    logo: 'https://unavatar.io/nubank.com.br',
-    avgPriceMin: 50,
-    avgPriceMax: 50,
-    howToCancel: 'App > Cartão Ultravioleta > Cancelar anuidade'
-  },
-  {
-    id: 'c6-carbon',
-    name: 'C6 Carbon',
-    logo: 'https://unavatar.io/c6bank.com.br',
-    avgPriceMin: 40,
-    avgPriceMax: 40,
-    howToCancel: 'App > Cartão Carbon > Trocar de plano'
-  }
-];
-
 // Extras Services (serviços fixos que não tem preview)
 export const extrasServices: Service[] = [
   {
@@ -743,7 +706,6 @@ export function getServiceById(serviceId: string): Service | undefined {
     ...gamesServices,
     ...fitnessServices,
     ...transporteServices,
-    ...financeiroServices,
     ...extrasServices,
   ];
 

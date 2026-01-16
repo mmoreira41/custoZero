@@ -9,7 +9,6 @@ import {
   gamesServices,
   fitnessServices,
   transporteServices,
-  financeiroServices,
   extrasServices,
 } from './services';
 
@@ -75,13 +74,6 @@ export const categories: Category[] = [
     name: 'Transporte',
     icon: '🚗',
     services: transporteServices,
-    isSubscription: true
-  },
-  {
-    id: 'financeiro',
-    name: 'Financeiro',
-    icon: '💳',
-    services: financeiroServices,
     isSubscription: true
   },
   {
