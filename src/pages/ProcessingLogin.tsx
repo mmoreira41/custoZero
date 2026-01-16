@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, CheckCircle2, Mail } from 'lucide-react'
+import { Loader2, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const POLLING_INTERVAL = 2000 // 2 seconds
-const TIMEOUT_DURATION = 30000 // 30 seconds
+const TIMEOUT_DURATION = 60000 // 60 seconds
 
 export default function ProcessingLogin() {
   const [searchParams] = useSearchParams()
@@ -54,11 +54,39 @@ export default function ProcessingLogin() {
         }
 
         if (data.token) {
-          // Token found! Redirect to questionnaire
-          console.log('Token found, redirecting to questionnaire')
+          // Token found! First mark it as used, then redirect
+          console.log('Token found, marking as used...')
           clearInterval(pollInterval)
           clearTimeout(timeoutTimer)
           clearInterval(elapsedTimer)
+
+          try {
+            // Mark token as used (burn the token)
+            const burnResponse = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/access_tokens?token=eq.${data.token}`,
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                  'Prefer': 'return=minimal',
+                },
+                body: JSON.stringify({ used: true }),
+              }
+            )
+
+            if (!burnResponse.ok) {
+              console.error('Failed to burn token:', burnResponse.statusText)
+            } else {
+              console.log('Token burned successfully')
+            }
+          } catch (burnError) {
+            console.error('Error burning token:', burnError)
+          }
+
+          // Redirect to questionnaire regardless of burn result
+          // (user should still access even if burn fails)
           navigate(`/diagnostico?token=${data.token}`)
         }
       } catch (error) {
@@ -184,21 +212,21 @@ export default function ProcessingLogin() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="w-8 h-8 text-green-600" />
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Mail className="w-8 h-8 text-amber-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Pagamento Confirmado!
+            Seu acesso está pronto!
           </h2>
           <p className="text-gray-600 mb-6">
-            Enviamos o link de acesso para seu email <strong>{email}</strong> por garantia.
+            Por segurança, este link de entrada expira após o uso. Se você não foi redirecionado automaticamente, tente atualizar a página ou verifique seu e-mail de confirmação da Cakto.
           </p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-3">
               <Mail className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-left">
                 <p className="text-sm font-medium text-blue-900 mb-1">
-                  Verifique sua caixa de entrada
+                  Verifique seu email: <strong>{email}</strong>
                 </p>
                 <p className="text-sm text-blue-700">
                   Caso não encontre, verifique a pasta de spam ou promoções.
@@ -206,13 +234,21 @@ export default function ProcessingLogin() {
               </div>
             </div>
           </div>
-          <Button
-            onClick={() => navigate('/')}
-            variant="outline"
-            className="w-full"
-          >
-            Voltar ao Início
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => window.location.reload()}
+              className="flex-1"
+            >
+              Atualizar Página
+            </Button>
+            <Button
+              onClick={() => navigate('/')}
+              variant="outline"
+              className="flex-1"
+            >
+              Voltar ao Início
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -235,10 +271,10 @@ export default function ProcessingLogin() {
 
         {/* Dynamic status messages based on time elapsed */}
         <p className="text-gray-600 mb-6">
-          {timeElapsed < 5 && 'Aguarde alguns instantes enquanto confirmamos sua compra.'}
-          {timeElapsed >= 5 && timeElapsed < 15 && 'Processando sua transação...'}
-          {timeElapsed >= 15 && timeElapsed < 25 && 'Quase pronto! Finalizando a validação...'}
-          {timeElapsed >= 25 && 'Isso está demorando mais do que o esperado...'}
+          {timeElapsed < 10 && 'Aguarde alguns instantes enquanto confirmamos sua compra.'}
+          {timeElapsed >= 10 && timeElapsed < 30 && 'Processando sua transação...'}
+          {timeElapsed >= 30 && timeElapsed < 50 && 'Quase pronto! Finalizando a validação...'}
+          {timeElapsed >= 50 && 'Isso está demorando mais do que o esperado...'}
         </p>
 
         {/* Progress indicator */}
@@ -246,7 +282,7 @@ export default function ProcessingLogin() {
           <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-1000 ease-out"
             style={{
-              width: `${Math.min((timeElapsed / 30) * 100, 100)}%`,
+              width: `${Math.min((timeElapsed / 60) * 100, 100)}%`,
             }}
           ></div>
         </div>
@@ -258,7 +294,7 @@ export default function ProcessingLogin() {
         </p>
 
         {/* Help text after some time */}
-        {timeElapsed > 15 && (
+        {timeElapsed > 30 && (
           <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-800">
               Se o processamento continuar por muito tempo, verifique seu email.

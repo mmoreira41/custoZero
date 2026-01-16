@@ -76,22 +76,22 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-    // Calculate the time threshold (5 minutes ago)
-    const fiveMinutesAgo = new Date()
-    fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5)
+    // Calculate the time threshold (24 hours ago)
+    const twentyFourHoursAgo = new Date()
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
 
     // Search for a valid token
     // Conditions:
     // 1. Email matches
     // 2. Not used yet (used = false)
-    // 3. Created within the last 5 minutes
+    // 3. Created within the last 24 hours
     // 4. Not expired
     const { data: tokens, error } = await supabase
       .from('access_tokens')
       .select('token, created_at, expires_at')
       .eq('email', email.toLowerCase().trim())
       .eq('used', false)
-      .gte('created_at', fiveMinutesAgo.toISOString())
+      .gte('created_at', twentyFourHoursAgo.toISOString())
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
@@ -143,8 +143,8 @@ serve(async (req) => {
 
     const hasAnyToken = anyTokens && anyTokens.length > 0
 
-    // No valid token found within 5 minutes
-    console.log(`No valid token found for email ${email} within the last 5 minutes`)
+    // No valid token found within 24 hours
+    console.log(`No valid token found for email ${email} within the last 24 hours`)
     return new Response(
       JSON.stringify({
         token: null,
