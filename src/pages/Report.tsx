@@ -31,7 +31,13 @@ export function Report() {
   const handleRestart = () => {
     if (confirm('Tem certeza que deseja fazer um novo diagnóstico? Seus dados atuais serão perdidos.')) {
       reset();
-      navigate('/');
+      // Manter o token do localStorage para permitir refazer durante 24h
+      const token = localStorage.getItem('custozero_token');
+      if (token) {
+        navigate(`/welcome?token=${token}`);
+      } else {
+        navigate('/acesso');
+      }
     }
   };
 

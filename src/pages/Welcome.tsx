@@ -15,7 +15,7 @@ const steps = [
   {
     icon: Clock,
     title: 'Como funciona',
-    description: 'Identificaremos seus gastos recorrentes em menos de 3 minutos.',
+    description: 'Identificaremos seus gastos recorrentes em menos de 5 minutos.',
     color: 'text-blue-500',
     bgColor: 'bg-blue-100',
   },
@@ -128,7 +128,7 @@ export default function Welcome() {
 
           {/* Footer note */}
           <p className="text-center text-sm text-gray-500 mt-4">
-            Leva menos de 3 minutos para completar
+            Leva menos de 5 minutos para completar
           </p>
         </div>
       </div>
