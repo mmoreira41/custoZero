@@ -11,7 +11,7 @@ export default function ProcessingLogin() {
   const navigate = useNavigate()
   const email = searchParams.get('email')
 
-  const [status, setStatus] = useState<'polling' | 'timeout' | 'error' | 'not-found'>('polling')
+  const [status, setStatus] = useState<'polling' | 'timeout' | 'error' | 'not-found' | 'expired'>('polling')
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [, setHasAnyToken] = useState(false)
 
@@ -53,41 +53,30 @@ export default function ProcessingLogin() {
           setHasAnyToken(data.hasAnyToken)
         }
 
-        if (data.token) {
-          // Token found! First mark it as used, then redirect
-          console.log('Token found, marking as used...')
+        // Check if token expired (passe livre 24h ended)
+        if (data.expired) {
+          console.log('Token expired, redirecting to expired page')
+          clearInterval(pollInterval)
+          clearTimeout(timeoutTimer)
+          clearInterval(elapsedTimer)
+          setStatus('expired')
+          return
+        }
+
+        if (data.token && data.createdAt) {
+          // Token found! Save to localStorage and redirect to welcome
+          console.log('Token found, saving session data...')
           clearInterval(pollInterval)
           clearTimeout(timeoutTimer)
           clearInterval(elapsedTimer)
 
-          try {
-            // Mark token as used (burn the token)
-            const burnResponse = await fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/access_tokens?token=eq.${data.token}`,
-              {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-                  'Prefer': 'return=minimal',
-                },
-                body: JSON.stringify({ used: true }),
-              }
-            )
+          // Save token data in localStorage for the 24h pass
+          localStorage.setItem('custozero_token', data.token)
+          localStorage.setItem('custozero_created_at', data.createdAt)
+          localStorage.setItem('custozero_email', email)
 
-            if (!burnResponse.ok) {
-              console.error('Failed to burn token:', burnResponse.statusText)
-            } else {
-              console.log('Token burned successfully')
-            }
-          } catch (burnError) {
-            console.error('Error burning token:', burnError)
-          }
-
-          // Redirect to questionnaire regardless of burn result
-          // (user should still access even if burn fails)
-          navigate(`/diagnostico?token=${data.token}`)
+          // Redirect to welcome page (tutorial)
+          navigate(`/welcome?token=${data.token}`)
         }
       } catch (error) {
         console.error('Error in polling:', error)
@@ -160,6 +149,60 @@ export default function ProcessingLogin() {
     )
   }
 
+  if (status === 'expired') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg
+              className="w-8 h-8 text-orange-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            Seu tempo expirou!
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Seu passe livre de 24 horas chegou ao fim. Mas não pare por aqui!
+          </p>
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 mb-6">
+            <p className="text-lg font-semibold text-green-800 mb-1">
+              Renove seu acesso
+            </p>
+            <p className="text-3xl font-bold text-green-600 mb-2">
+              R$ 7,00
+            </p>
+            <p className="text-sm text-green-700">
+              Acesso ilimitado por mais 30 dias
+            </p>
+          </div>
+          <Button
+            onClick={() => window.location.href = 'https://pay.cakto.com.br/rssnmc4_725942'}
+            className="w-full bg-green-600 hover:bg-green-700 mb-3"
+          >
+            Renovar Agora
+          </Button>
+          <Button
+            onClick={() => navigate('/')}
+            variant="ghost"
+            className="w-full"
+          >
+            Voltar ao Início
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (status === 'not-found') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -216,10 +259,10 @@ export default function ProcessingLogin() {
             <Mail className="w-8 h-8 text-amber-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Seu acesso está pronto!
+            Verificação em andamento
           </h2>
           <p className="text-gray-600 mb-6">
-            Por segurança, este link de entrada expira após o uso. Se você não foi redirecionado automaticamente, tente atualizar a página ou verifique seu e-mail de confirmação da Cakto.
+            Seu pagamento pode levar alguns minutos para ser processado. Tente novamente em instantes ou verifique seu e-mail.
           </p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-3">
@@ -239,7 +282,7 @@ export default function ProcessingLogin() {
               onClick={() => window.location.reload()}
               className="flex-1"
             >
-              Atualizar Página
+              Tentar Novamente
             </Button>
             <Button
               onClick={() => navigate('/')}
@@ -266,7 +309,7 @@ export default function ProcessingLogin() {
 
         {/* Main message */}
         <h2 className="text-2xl font-bold text-gray-900 mb-3">
-          Estamos validando seu pagamento...
+          Validando seu acesso...
         </h2>
 
         {/* Dynamic status messages based on time elapsed */}

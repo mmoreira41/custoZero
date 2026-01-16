@@ -12,6 +12,7 @@ import { buildAlternateLogoUrl, buildFallbackLogo } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
 import { getMainDream, getAlternativeDreams } from '@/data/dreams';
 import { useCountUp } from '@/hooks/useCountUp';
+import ExpirationTimer from '@/components/ExpirationTimer';
 
 export function Report() {
   const navigate = useNavigate();
@@ -34,6 +35,10 @@ export function Report() {
     }
   };
 
+  const handleExpire = () => {
+    navigate('/acesso-expirado');
+  };
+
   // Busca o sonho principal e alternativas baseado no valor real
   const mainDream = getMainDream(result.wasteYearly);
   const alternativeDreams = getAlternativeDreams(result.wasteYearly, mainDream);
@@ -54,6 +59,7 @@ export function Report() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-24">
+      <ExpirationTimer onExpire={handleExpire} />
       {/* Header com Logo */}
       <header className="px-4 pt-6">
         <div className="max-w-4xl mx-auto">

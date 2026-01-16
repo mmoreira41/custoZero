@@ -12,10 +12,14 @@ interface PollTokenRequest {
 
 interface PollTokenResponse {
   token: string | null
+  createdAt?: string    // Data de criação do token para calcular expiração no frontend
   message?: string
-  hasAnyToken?: boolean  // Indica se o email tem ALGUM token (mesmo antigo)
-  emailSent?: boolean    // Indica se foi enviado email para esse cliente
+  hasAnyToken?: boolean
+  emailSent?: boolean
+  expired?: boolean     // Indica se o token expirou (>24h)
 }
+
+const PASS_DURATION_HOURS = 24
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -75,29 +79,19 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+    const now = new Date()
 
-    // Calculate the time threshold (24 hours ago)
-    const twentyFourHoursAgo = new Date()
-    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
-
-    // Search for a valid token
-    // Conditions:
-    // 1. Email matches
-    // 2. Not used yet (used = false)
-    // 3. Created within the last 24 hours
-    // 4. Not expired
-    const { data: tokens, error } = await supabase
+    // First, check for any unused token for this email (regardless of age)
+    const { data: unusedTokens, error: unusedError } = await supabase
       .from('access_tokens')
       .select('token, created_at, expires_at')
       .eq('email', email.toLowerCase().trim())
       .eq('used', false)
-      .gte('created_at', twentyFourHoursAgo.toISOString())
-      .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
 
-    if (error) {
-      console.error('Error querying access_tokens:', error)
+    if (unusedError) {
+      console.error('Error querying access_tokens:', unusedError)
       return new Response(
         JSON.stringify({
           token: null,
@@ -110,31 +104,62 @@ serve(async (req) => {
       )
     }
 
-    // If a valid token is found, return it
-    if (tokens && tokens.length > 0) {
-      const tokenData = tokens[0]
-      console.log(`Token found for email ${email}: ${tokenData.token}`)
+    // If we found an unused token, check if it's within 24h
+    if (unusedTokens && unusedTokens.length > 0) {
+      const tokenData = unusedTokens[0]
+      const createdAt = new Date(tokenData.created_at)
+      const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
 
-      return new Response(
-        JSON.stringify({
-          token: tokenData.token,
-          message: 'Token encontrado com sucesso',
-          hasAnyToken: true,
-          emailSent: true
-        } as PollTokenResponse),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      )
+      // Check if token is within the 24h window
+      if (hoursSinceCreation < PASS_DURATION_HOURS) {
+        // Token is valid - return it with created_at for frontend timer
+        console.log(`Valid token found for ${email}: ${tokenData.token} (${hoursSinceCreation.toFixed(1)}h old)`)
+
+        return new Response(
+          JSON.stringify({
+            token: tokenData.token,
+            createdAt: tokenData.created_at,
+            message: 'Token encontrado com sucesso',
+            hasAnyToken: true,
+            emailSent: true,
+            expired: false
+          } as PollTokenResponse),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      } else {
+        // Token expired (>24h) - mark as used and return expired status
+        console.log(`Token expired for ${email}: ${tokenData.token} (${hoursSinceCreation.toFixed(1)}h old) - marking as used`)
+
+        await supabase
+          .from('access_tokens')
+          .update({ used: true })
+          .eq('token', tokenData.token)
+
+        return new Response(
+          JSON.stringify({
+            token: null,
+            message: 'Seu passe livre de 24h expirou. Renove seu acesso por apenas R$ 7,00!',
+            hasAnyToken: true,
+            emailSent: true,
+            expired: true
+          } as PollTokenResponse),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
     }
 
-    // No recent token found, but check if email has ANY token (even old ones)
-    // This helps differentiate between "email with purchase" vs "random email"
+    // No unused token found - check if email has ANY token (even used ones)
     const { data: anyTokens, error: anyTokenError } = await supabase
       .from('access_tokens')
-      .select('token, created_at')
+      .select('token, created_at, used')
       .eq('email', email.toLowerCase().trim())
+      .order('created_at', { ascending: false })
       .limit(1)
 
     if (anyTokenError) {
@@ -142,17 +167,21 @@ serve(async (req) => {
     }
 
     const hasAnyToken = anyTokens && anyTokens.length > 0
+    const wasUsed = hasAnyToken && anyTokens[0].used
 
-    // No valid token found within 24 hours
-    console.log(`No valid token found for email ${email} within the last 24 hours`)
+    // No valid token found
+    console.log(`No valid token found for email ${email}`)
     return new Response(
       JSON.stringify({
         token: null,
-        message: hasAnyToken
-          ? 'Nenhum token válido encontrado ainda. Verifique seu email.'
-          : 'Email não encontrado em nossa base de dados.',
+        message: wasUsed
+          ? 'Seu passe livre já foi utilizado. Renove seu acesso por apenas R$ 7,00!'
+          : hasAnyToken
+            ? 'Nenhum token válido encontrado. Verifique seu email.'
+            : 'Email não encontrado em nossa base de dados.',
         hasAnyToken,
-        emailSent: hasAnyToken
+        emailSent: hasAnyToken,
+        expired: wasUsed
       } as PollTokenResponse),
       {
         status: 200,

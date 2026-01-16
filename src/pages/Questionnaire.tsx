@@ -9,6 +9,7 @@ import { Loading } from './Loading';
 import { categories } from '@/data/categories';
 import { calculateDiagnostic } from '@/lib/calculations';
 import { insertDiagnosticSecure } from '@/lib/supabase-secure';
+import ExpirationTimer from '@/components/ExpirationTimer';
 import type { ServiceInput as ServiceInputType } from '@/types';
 
 type Step = 'selection' | 'input';
@@ -180,6 +181,10 @@ export function Questionnaire() {
     navigate('/relatorio');
   };
 
+  const handleExpire = () => {
+    navigate('/acesso-expirado');
+  };
+
   // Se está calculando, mostrar loading
   if (isCalculating) {
     return <Loading onComplete={handleLoadingComplete} />;
@@ -187,6 +192,7 @@ export function Questionnaire() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
+      <ExpirationTimer onExpire={handleExpire} />
       <AnimatePresence initial={false} custom={direction} mode="wait">
         <motion.div
           key={`${currentCategory.id}-${step}`}
