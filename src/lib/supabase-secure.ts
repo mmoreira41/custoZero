@@ -85,6 +85,7 @@ export async function validateTokenSecure(
  *
  * Esta função acessa a tabela access_tokens diretamente.
  * Só funciona se RLS estiver desabilitado.
+ * NÃO marca como usado (Passe Livre 24h).
  *
  * @deprecated Use validateTokenSecure() em produção
  * @param token - Token UUID
@@ -96,10 +97,9 @@ export async function validateTokenDirect(
   try {
     const { data, error } = await supabase
       .from('access_tokens')
-      .select('email, token, used, expires_at')
+      .select('email, token, used, expires_at, created_at')
       .eq('token', token)
       .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
       .single();
 
     if (error || !data) {
@@ -107,12 +107,21 @@ export async function validateTokenDirect(
       return null;
     }
 
-    // Marcar como usado
-    await supabase
-      .from('access_tokens')
-      .update({ used: true })
-      .eq('token', token);
+    // Verificar se está dentro das 24h (Passe Livre)
+    const createdAt = new Date(data.created_at);
+    const now = new Date();
+    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
 
+    if (hoursSinceCreation >= 24) {
+      // Token expirou (>24h) - marcar como usado
+      await supabase
+        .from('access_tokens')
+        .update({ used: true })
+        .eq('token', token);
+      return null;
+    }
+
+    // Token válido - NÃO marca como usado durante 24h
     return { email: data.email };
   } catch (err) {
     console.error('Unexpected error in validateTokenDirect:', err);

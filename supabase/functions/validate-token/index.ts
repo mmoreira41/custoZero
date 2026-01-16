@@ -1,8 +1,8 @@
 // ============================================================================
 // Edge Function: validate-token
-// Descrição: Valida e marca tokens como usados de forma segura
+// Descrição: Valida tokens - NÃO marca como usado durante 24h (Passe Livre)
 // Autor: Security Implementation
-// Data: 2026-01-09
+// Data: 2026-01-16
 // ============================================================================
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -17,6 +17,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const PASS_DURATION_HOURS = 24;
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -28,7 +30,9 @@ interface ValidateTokenRequest {
 interface ValidateTokenResponse {
   valid: boolean;
   email?: string;
+  createdAt?: string;
   error?: string;
+  expired?: boolean;
 }
 
 interface AccessToken {
@@ -36,6 +40,7 @@ interface AccessToken {
   token: string;
   used: boolean;
   expires_at: string;
+  created_at: string;
 }
 
 // ============================================================================
@@ -91,12 +96,12 @@ serve(async (req: Request) => {
     });
 
     // ========================================================================
-    // 3. VALIDAR TOKEN NO BANCO
+    // 3. BUSCAR TOKEN NO BANCO
     // ========================================================================
 
     const { data: tokenData, error: selectError } = await supabase
       .from('access_tokens')
-      .select('email, token, used, expires_at')
+      .select('email, token, used, expires_at, created_at')
       .eq('token', token)
       .single();
 
@@ -113,15 +118,22 @@ serve(async (req: Request) => {
     }
 
     const accessToken = tokenData as AccessToken;
+    const now = new Date();
+    const createdAt = new Date(accessToken.created_at);
+    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
 
     // ========================================================================
-    // 4. VERIFICAR SE TOKEN JÁ FOI USADO
+    // 4. VERIFICAR SE TOKEN JÁ FOI MARCADO COMO USADO
     // ========================================================================
 
     if (accessToken.used) {
       console.log(`Token already used: ${token}`);
       return new Response(
-        JSON.stringify({ valid: false, error: 'Token already used' }),
+        JSON.stringify({
+          valid: false,
+          error: 'Seu passe livre já foi utilizado. Renove por R$ 7,00!',
+          expired: true
+        }),
         {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -130,16 +142,20 @@ serve(async (req: Request) => {
     }
 
     // ========================================================================
-    // 5. VERIFICAR SE TOKEN EXPIROU
+    // 5. VERIFICAR SE TOKEN ESTÁ DENTRO DA JANELA DE 24H (PASSE LIVRE)
     // ========================================================================
 
-    const expiresAt = new Date(accessToken.expires_at);
-    const now = new Date();
+    if (hoursSinceCreation < PASS_DURATION_HOURS) {
+      // Token válido e dentro das 24h - NÃO marca como usado
+      console.log(`Token valid (${hoursSinceCreation.toFixed(1)}h old): ${token} for ${accessToken.email}`);
 
-    if (expiresAt < now) {
-      console.log(`Token expired: ${token}`);
       return new Response(
-        JSON.stringify({ valid: false, error: 'Token expired' }),
+        JSON.stringify({
+          valid: true,
+          email: accessToken.email,
+          createdAt: accessToken.created_at,
+          expired: false
+        } as ValidateTokenResponse),
         {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -148,30 +164,21 @@ serve(async (req: Request) => {
     }
 
     // ========================================================================
-    // 6. MARCAR TOKEN COMO USADO
+    // 6. TOKEN EXPIROU (>24H) - MARCAR COMO USADO
     // ========================================================================
 
-    const { error: updateError } = await supabase
+    console.log(`Token expired (${hoursSinceCreation.toFixed(1)}h old): ${token} - marking as used`);
+
+    await supabase
       .from('access_tokens')
       .update({ used: true })
       .eq('token', token);
 
-    if (updateError) {
-      console.error('Error marking token as used:', updateError);
-      // Retorna sucesso mesmo com erro de update
-      // (melhor permitir acesso do que bloquear por erro técnico)
-    }
-
-    // ========================================================================
-    // 7. RETORNAR SUCESSO
-    // ========================================================================
-
-    console.log(`Token validated successfully: ${token} for ${accessToken.email}`);
-
     return new Response(
       JSON.stringify({
-        valid: true,
-        email: accessToken.email,
+        valid: false,
+        error: 'Seu passe livre de 24h expirou. Renove por R$ 7,00!',
+        expired: true
       } as ValidateTokenResponse),
       {
         status: 200,
@@ -198,63 +205,3 @@ serve(async (req: Request) => {
     );
   }
 });
-
-// ============================================================================
-// TESTES LOCAIS
-// ============================================================================
-
-/*
-# Para testar localmente:
-
-1. Instalar Supabase CLI:
-   brew install supabase/tap/supabase
-
-2. Iniciar projeto:
-   supabase init
-   supabase start
-
-3. Servir função localmente:
-   supabase functions serve validate-token --env-file .env.local
-
-4. Testar com curl:
-   curl -i --location --request POST 'http://localhost:54321/functions/v1/validate-token' \
-     --header 'Authorization: Bearer YOUR_ANON_KEY' \
-     --header 'Content-Type: application/json' \
-     --data '{"token":"test-token-123"}'
-
-5. Resultado esperado:
-   {
-     "valid": true,
-     "email": "user@example.com"
-   }
-*/
-
-// ============================================================================
-// DEPLOY
-// ============================================================================
-
-/*
-# Deploy para produção:
-
-1. Login no Supabase:
-   supabase login
-
-2. Link ao projeto:
-   supabase link --project-ref YOUR_PROJECT_REF
-
-3. Deploy da função:
-   supabase functions deploy validate-token
-
-4. Verificar secrets:
-   supabase secrets list
-
-   Secrets necessários (já configurados automaticamente):
-   - SUPABASE_URL
-   - SUPABASE_SERVICE_ROLE_KEY
-
-5. Testar em produção:
-   curl -i --location --request POST 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/validate-token' \
-     --header 'Authorization: Bearer YOUR_ANON_KEY' \
-     --header 'Content-Type: application/json' \
-     --data '{"token":"real-token-from-kiwify"}'
-*/
