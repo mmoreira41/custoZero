@@ -41,7 +41,7 @@ export function Landing() {
 
       <div className="relative">
         <header className="mx-auto max-w-6xl px-6 pt-6">
-          <Logo className="h-8 w-auto" variant="white" />
+          <Logo className="h-8 w-auto" />
         </header>
 
         <Hero
