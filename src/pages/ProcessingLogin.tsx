@@ -11,7 +11,7 @@ export default function ProcessingLogin() {
   const navigate = useNavigate()
   const email = searchParams.get('email')
 
-  const [status, setStatus] = useState<'polling' | 'timeout' | 'error' | 'not-found' | 'expired'>('polling')
+  const [status, setStatus] = useState<'polling' | 'timeout' | 'error' | 'not-found'>('polling')
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [, setHasAnyToken] = useState(false)
 
@@ -59,21 +59,36 @@ export default function ProcessingLogin() {
           clearInterval(pollInterval)
           clearTimeout(timeoutTimer)
           clearInterval(elapsedTimer)
-          setStatus('expired')
+          // Redirect to the new AccessExpired page
+          navigate('/acesso-expirado')
           return
         }
 
         if (data.token && data.createdAt) {
           // Token found! Save to localStorage and redirect to welcome
-          console.log('Token found, saving session data...')
+          console.log('Token found, saving session data...', {
+            isLifetime: data.isLifetime,
+            expiresAt: data.expiresAt,
+          })
           clearInterval(pollInterval)
           clearTimeout(timeoutTimer)
           clearInterval(elapsedTimer)
 
-          // Save token data in localStorage for the 24h pass
+          // Save token data in localStorage
           localStorage.setItem('custozero_token', data.token)
           localStorage.setItem('custozero_created_at', data.createdAt)
           localStorage.setItem('custozero_email', email)
+
+          // Save lifetime and expires_at info
+          if (data.isLifetime) {
+            localStorage.setItem('custozero_is_lifetime', 'true')
+            localStorage.removeItem('custozero_expires_at') // No expiration for lifetime
+          } else {
+            localStorage.setItem('custozero_is_lifetime', 'false')
+            if (data.expiresAt) {
+              localStorage.setItem('custozero_expires_at', data.expiresAt)
+            }
+          }
 
           // Redirect to welcome page (tutorial)
           navigate(`/welcome?token=${data.token}`)
@@ -140,60 +155,6 @@ export default function ProcessingLogin() {
           </p>
           <Button
             onClick={() => navigate('/')}
-            className="w-full"
-          >
-            Voltar ao Início
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (status === 'expired') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-8 h-8 text-orange-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Seu tempo expirou!
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Seu passe livre de 24 horas chegou ao fim. Mas não pare por aqui!
-          </p>
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 mb-6">
-            <p className="text-lg font-semibold text-green-800 mb-1">
-              Renove seu acesso
-            </p>
-            <p className="text-3xl font-bold text-green-600 mb-2">
-              R$ 7,00
-            </p>
-            <p className="text-sm text-green-700">
-              Acesso ilimitado por mais 30 dias
-            </p>
-          </div>
-          <Button
-            onClick={() => window.location.href = 'https://pay.cakto.com.br/rssnmc4_725942'}
-            className="w-full bg-green-600 hover:bg-green-700 mb-3"
-          >
-            Renovar Agora
-          </Button>
-          <Button
-            onClick={() => navigate('/')}
-            variant="ghost"
             className="w-full"
           >
             Voltar ao Início

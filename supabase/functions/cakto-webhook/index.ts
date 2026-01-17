@@ -9,6 +9,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Valores dos planos em centavos
+const PRICE_REACTIVATION_24H = 790;  // R$ 7,90
+const PRICE_LIFETIME = 4700;         // R$ 47,00
+
 interface CaktoWebhookPayload {
   // Formato da Cakto (estrutura aninhada)
   event?: string; // "purchase_approved" (na raiz)
@@ -25,7 +29,7 @@ interface CaktoWebhookPayload {
       id: string;
       name: string;
     };
-    amount?: number;
+    amount?: number; // Valor em centavos
     currency?: string;
     created_at?: string;
   };
@@ -62,6 +66,7 @@ serve(async (req) => {
     const customerEmail = payload.data?.customer?.email; // Email (em data.customer.email)
     const customerName = payload.data?.customer?.name || 'Cliente'; // Nome
     const productName = payload.data?.product?.name || 'Diagnóstico Financeiro CustoZero';
+    const amount = payload.data?.amount || 0; // Valor em centavos
 
     console.log('📥 Cakto webhook received:', {
       event,
@@ -70,6 +75,7 @@ serve(async (req) => {
       email: customerEmail,
       name: customerName,
       product: productName,
+      amount: amount,
     });
 
     // Validar se é um evento de compra aprovada
@@ -125,20 +131,239 @@ serve(async (req) => {
       }
     }
 
+    const normalizedEmail = customerEmail.toLowerCase().trim();
+    const appUrl = Deno.env.get('APP_URL') || 'http://localhost:5173';
+
+    // Determinar tipo de plano baseado no valor
+    const isLifetimePurchase = amount >= PRICE_LIFETIME;
+    const isReactivation = amount >= PRICE_REACTIVATION_24H && amount < PRICE_LIFETIME;
+
+    console.log('💰 Payment type detection:', {
+      amount,
+      isLifetimePurchase,
+      isReactivation,
+    });
+
+    // Buscar token existente para este email
+    const { data: existingUserTokens } = await supabase
+      .from('access_tokens')
+      .select('id, token, is_lifetime')
+      .eq('email', normalizedEmail)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const existingUserToken = existingUserTokens?.[0];
+
+    // ========================================
+    // CASO 1: Compra Vitalícia (R$ 47,00)
+    // ========================================
+    if (isLifetimePurchase) {
+      console.log('💎 Processing LIFETIME purchase');
+
+      if (existingUserToken) {
+        // Atualizar registro existente para vitalício
+        const { error: updateError } = await supabase
+          .from('access_tokens')
+          .update({
+            is_lifetime: true,
+            used: false,
+            expires_at: null,
+            order_id: transactionId,
+            customer_name: customerName,
+          })
+          .eq('id', existingUserToken.id);
+
+        if (updateError) {
+          console.error('❌ Error updating to lifetime:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to upgrade to lifetime', details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('✅ Token upgraded to LIFETIME:', {
+          email: normalizedEmail,
+          token: existingUserToken.token,
+          transaction_id: transactionId,
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+            token: existingUserToken.token,
+            is_lifetime: true,
+            message: 'Upgraded to lifetime access',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Criar novo token vitalício
+        const newToken = crypto.randomUUID();
+        const { error: insertError } = await supabase
+          .from('access_tokens')
+          .insert({
+            token: newToken,
+            email: normalizedEmail,
+            used: false,
+            is_lifetime: true,
+            expires_at: null,
+            order_id: transactionId,
+            customer_name: customerName,
+          });
+
+        if (insertError) {
+          console.error('❌ Error creating lifetime token:', insertError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to create lifetime token', details: insertError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('✅ New LIFETIME token created:', {
+          email: normalizedEmail,
+          token: newToken,
+          transaction_id: transactionId,
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+            token: newToken,
+            is_lifetime: true,
+            message: 'Lifetime access created',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ========================================
+    // CASO 2: Reativação 24h (R$ 7,90)
+    // ========================================
+    if (isReactivation) {
+      console.log('🔄 Processing REACTIVATION (24h) purchase');
+
+      // Calcular nova expiração (24 horas a partir de agora)
+      const newExpiresAt = new Date();
+      newExpiresAt.setHours(newExpiresAt.getHours() + 24);
+
+      if (existingUserToken) {
+        // Se já é vitalício, não fazer downgrade
+        if (existingUserToken.is_lifetime) {
+          console.log('⚠️ User already has lifetime access, ignoring reactivation');
+          return new Response(
+            JSON.stringify({
+              success: true,
+              redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+              token: existingUserToken.token,
+              is_lifetime: true,
+              message: 'User already has lifetime access',
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Reativar token existente por mais 24h
+        const { error: updateError } = await supabase
+          .from('access_tokens')
+          .update({
+            used: false,
+            expires_at: newExpiresAt.toISOString(),
+            order_id: transactionId,
+            customer_name: customerName,
+          })
+          .eq('id', existingUserToken.id);
+
+        if (updateError) {
+          console.error('❌ Error reactivating token:', updateError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to reactivate token', details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('✅ Token REACTIVATED for 24h:', {
+          email: normalizedEmail,
+          token: existingUserToken.token,
+          transaction_id: transactionId,
+          expires_at: newExpiresAt.toISOString(),
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+            token: existingUserToken.token,
+            expires_at: newExpiresAt.toISOString(),
+            message: 'Token reactivated for 24 hours',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Criar novo token com 24h de validade
+        const newToken = crypto.randomUUID();
+        const { error: insertError } = await supabase
+          .from('access_tokens')
+          .insert({
+            token: newToken,
+            email: normalizedEmail,
+            used: false,
+            is_lifetime: false,
+            expires_at: newExpiresAt.toISOString(),
+            order_id: transactionId,
+            customer_name: customerName,
+          });
+
+        if (insertError) {
+          console.error('❌ Error creating reactivation token:', insertError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to create token', details: insertError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('✅ New 24h token created:', {
+          email: normalizedEmail,
+          token: newToken,
+          transaction_id: transactionId,
+          expires_at: newExpiresAt.toISOString(),
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+            token: newToken,
+            expires_at: newExpiresAt.toISOString(),
+            message: '24h access created',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ========================================
+    // CASO 3: Outro valor (primeira compra padrão ou valor desconhecido)
+    // ========================================
+    console.log('📦 Processing standard purchase (unknown amount or first purchase)');
+
     // Gerar token único (UUID)
     const token = crypto.randomUUID();
 
-    // Calcular data de expiração (30 dias)
+    // Calcular data de expiração (24 horas para passe livre)
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setHours(expiresAt.getHours() + 24);
 
     // Salvar token no banco
     const { error: insertError } = await supabase
       .from('access_tokens')
       .insert({
         token,
-        email: customerEmail.toLowerCase().trim(),
+        email: normalizedEmail,
         used: false,
+        is_lifetime: false,
         expires_at: expiresAt.toISOString(),
         order_id: transactionId,
         customer_name: customerName,
@@ -155,12 +380,10 @@ serve(async (req) => {
       );
     }
 
-    // Construir URL de processamento (redirecionamento automático)
-    const appUrl = Deno.env.get('APP_URL') || 'http://localhost:5173';
-    const processingUrl = `${appUrl}/processando?email=${encodeURIComponent(customerEmail)}`;
+    const processingUrl = `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`;
 
     console.log('✅ Token created successfully:', {
-      email: customerEmail,
+      email: normalizedEmail,
       token,
       transaction_id: transactionId,
       expires_at: expiresAt.toISOString(),

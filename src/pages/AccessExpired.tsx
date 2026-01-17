@@ -38,12 +38,12 @@ export default function AccessExpired() {
           <PricingCard
             title="Use uma vez"
             price="R$ 7,90"
-            period="/ 30 dias"
+            period="/ 24 Horas"
             description="Perfeito para quem quer testar o poder dos diagnósticos."
             features={[
               'Diagnósticos Ilimitados',
               'Relatórios Detalhados',
-              '30 dias de acesso completo',
+              '24 horas de acesso completo',
             ]}
             badge="Mais Popular"
             onSelect={handleSelect30Days}
@@ -52,7 +52,7 @@ export default function AccessExpired() {
           {/* Lifetime - Premium */}
           <PricingCard
             title="Acesso Vitalício"
-            price="R$ 47"
+            price="R$ 57,90"
             description="Pagamento único. Economia para sempre."
             features={[
               'Diagnósticos Ilimitados',

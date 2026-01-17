@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock } from 'lucide-react'
+import { Clock, Gem } from 'lucide-react'
 
 const PASS_DURATION_MS = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 
@@ -11,11 +11,21 @@ interface TimeRemaining {
   total: number
 }
 
-function calculateTimeRemaining(createdAt: string): TimeRemaining {
-  const created = new Date(createdAt).getTime()
-  const expiresAt = created + PASS_DURATION_MS
+function calculateTimeRemaining(expiresAt: string | null, createdAt: string | null): TimeRemaining {
+  let expiresAtMs: number
+
+  if (expiresAt) {
+    // Se temos expires_at, usar diretamente
+    expiresAtMs = new Date(expiresAt).getTime()
+  } else if (createdAt) {
+    // Fallback: calcular baseado em created_at + 24h
+    expiresAtMs = new Date(createdAt).getTime() + PASS_DURATION_MS
+  } else {
+    return { hours: 0, minutes: 0, seconds: 0, total: 0 }
+  }
+
   const now = Date.now()
-  const total = Math.max(0, expiresAt - now)
+  const total = Math.max(0, expiresAtMs - now)
 
   const hours = Math.floor(total / (1000 * 60 * 60))
   const minutes = Math.floor((total % (1000 * 60 * 60)) / (1000 * 60))
@@ -36,18 +46,27 @@ export default function ExpirationTimer({ onExpire }: ExpirationTimerProps) {
   const navigate = useNavigate()
   const [timeRemaining, setTimeRemaining] = useState<TimeRemaining | null>(null)
   const [isExpired, setIsExpired] = useState(false)
+  const [isLifetime, setIsLifetime] = useState(false)
 
   useEffect(() => {
     const createdAt = localStorage.getItem('custozero_created_at')
+    const expiresAt = localStorage.getItem('custozero_expires_at')
+    const lifetimeFlag = localStorage.getItem('custozero_is_lifetime')
 
-    if (!createdAt) {
+    // Check if user has lifetime access
+    if (lifetimeFlag === 'true') {
+      setIsLifetime(true)
+      return
+    }
+
+    if (!createdAt && !expiresAt) {
       // No session data, redirect to access page
       navigate('/acesso')
       return
     }
 
     // Calculate initial time
-    const initial = calculateTimeRemaining(createdAt)
+    const initial = calculateTimeRemaining(expiresAt, createdAt)
     setTimeRemaining(initial)
 
     if (initial.total <= 0) {
@@ -58,7 +77,7 @@ export default function ExpirationTimer({ onExpire }: ExpirationTimerProps) {
 
     // Update every second
     const interval = setInterval(() => {
-      const remaining = calculateTimeRemaining(createdAt)
+      const remaining = calculateTimeRemaining(expiresAt, createdAt)
       setTimeRemaining(remaining)
 
       if (remaining.total <= 0) {
@@ -67,13 +86,30 @@ export default function ExpirationTimer({ onExpire }: ExpirationTimerProps) {
         // Clear localStorage
         localStorage.removeItem('custozero_token')
         localStorage.removeItem('custozero_created_at')
+        localStorage.removeItem('custozero_expires_at')
         localStorage.removeItem('custozero_email')
+        localStorage.removeItem('custozero_is_lifetime')
         if (onExpire) onExpire()
       }
     }, 1000)
 
     return () => clearInterval(interval)
   }, [navigate, onExpire])
+
+  // Mostrar selo de acesso vitalício
+  if (isLifetime) {
+    return (
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-2 px-4 text-center sticky top-0 z-50 shadow-md">
+        <div className="flex items-center justify-center gap-2">
+          <Gem className="w-4 h-4" />
+          <span className="font-medium">Acesso Vitalício</span>
+          <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-semibold">
+            PREMIUM
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   if (!timeRemaining) {
     return null
@@ -89,7 +125,7 @@ export default function ExpirationTimer({ onExpire }: ExpirationTimerProps) {
             onClick={() => navigate('/acesso-expirado')}
             className="ml-2 bg-white text-orange-600 px-3 py-1 rounded-full text-sm font-semibold hover:bg-orange-50 transition-colors"
           >
-            Renovar por R$ 7
+            Renovar por R$ 7,90
           </button>
         </div>
       </div>

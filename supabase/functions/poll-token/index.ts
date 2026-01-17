@@ -13,6 +13,8 @@ interface PollTokenRequest {
 interface PollTokenResponse {
   token: string | null
   createdAt?: string    // Data de criação do token para calcular expiração no frontend
+  expiresAt?: string    // Data de expiração do token (null se vitalício)
+  isLifetime?: boolean  // Se true, usuário tem acesso vitalício
   message?: string
   hasAnyToken?: boolean
   emailSent?: boolean
@@ -80,13 +82,16 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
     const now = new Date()
+    const normalizedEmail = email.toLowerCase().trim()
 
-    // First, check for any unused token for this email (regardless of age)
+    // First, check for any unused token for this email
+    // Order by is_lifetime DESC to prioritize lifetime tokens
     const { data: unusedTokens, error: unusedError } = await supabase
       .from('access_tokens')
-      .select('token, created_at, expires_at')
-      .eq('email', email.toLowerCase().trim())
+      .select('token, created_at, expires_at, is_lifetime')
+      .eq('email', normalizedEmail)
       .eq('used', false)
+      .order('is_lifetime', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
 
@@ -104,21 +109,60 @@ serve(async (req) => {
       )
     }
 
-    // If we found an unused token, check if it's within 24h
+    // If we found an unused token
     if (unusedTokens && unusedTokens.length > 0) {
       const tokenData = unusedTokens[0]
-      const createdAt = new Date(tokenData.created_at)
-      const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+      const isLifetime = tokenData.is_lifetime === true
 
-      // Check if token is within the 24h window
-      if (hoursSinceCreation < PASS_DURATION_HOURS) {
-        // Token is valid - return it with created_at for frontend timer
-        console.log(`Valid token found for ${email}: ${tokenData.token} (${hoursSinceCreation.toFixed(1)}h old)`)
+      // ========================================
+      // CASO 1: Token Vitalício - Sempre válido
+      // ========================================
+      if (isLifetime) {
+        console.log(`💎 LIFETIME token found for ${normalizedEmail}: ${tokenData.token}`)
 
         return new Response(
           JSON.stringify({
             token: tokenData.token,
             createdAt: tokenData.created_at,
+            expiresAt: null,
+            isLifetime: true,
+            message: 'Acesso vitalício ativo!',
+            hasAnyToken: true,
+            emailSent: true,
+            expired: false
+          } as PollTokenResponse),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+
+      // ========================================
+      // CASO 2: Token Temporário - Verificar expiração
+      // ========================================
+      const createdAt = new Date(tokenData.created_at)
+      const expiresAt = tokenData.expires_at ? new Date(tokenData.expires_at) : null
+
+      // Usar expires_at se disponível, senão calcular baseado em created_at
+      let isExpired = false
+      if (expiresAt) {
+        isExpired = now.getTime() > expiresAt.getTime()
+      } else {
+        const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+        isExpired = hoursSinceCreation >= PASS_DURATION_HOURS
+      }
+
+      if (!isExpired) {
+        // Token is valid - return it with created_at for frontend timer
+        console.log(`Valid token found for ${normalizedEmail}: ${tokenData.token}`)
+
+        return new Response(
+          JSON.stringify({
+            token: tokenData.token,
+            createdAt: tokenData.created_at,
+            expiresAt: tokenData.expires_at,
+            isLifetime: false,
             message: 'Token encontrado com sucesso',
             hasAnyToken: true,
             emailSent: true,
@@ -130,8 +174,8 @@ serve(async (req) => {
           }
         )
       } else {
-        // Token expired (>24h) - mark as used and return expired status
-        console.log(`Token expired for ${email}: ${tokenData.token} (${hoursSinceCreation.toFixed(1)}h old) - marking as used`)
+        // Token expired - mark as used and return expired status
+        console.log(`Token expired for ${normalizedEmail}: ${tokenData.token} - marking as used`)
 
         await supabase
           .from('access_tokens')
@@ -141,7 +185,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             token: null,
-            message: 'Seu passe livre de 24h expirou. Renove seu acesso por apenas R$ 7,00!',
+            message: 'Seu passe livre expirou. Renove seu acesso por apenas R$ 7,90!',
             hasAnyToken: true,
             emailSent: true,
             expired: true
@@ -157,8 +201,9 @@ serve(async (req) => {
     // No unused token found - check if email has ANY token (even used ones)
     const { data: anyTokens, error: anyTokenError } = await supabase
       .from('access_tokens')
-      .select('token, created_at, used')
-      .eq('email', email.toLowerCase().trim())
+      .select('token, created_at, used, is_lifetime')
+      .eq('email', normalizedEmail)
+      .order('is_lifetime', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
 
@@ -170,12 +215,12 @@ serve(async (req) => {
     const wasUsed = hasAnyToken && anyTokens[0].used
 
     // No valid token found
-    console.log(`No valid token found for email ${email}`)
+    console.log(`No valid token found for email ${normalizedEmail}`)
     return new Response(
       JSON.stringify({
         token: null,
         message: wasUsed
-          ? 'Seu passe livre já foi utilizado. Renove seu acesso por apenas R$ 7,00!'
+          ? 'Seu passe livre já foi utilizado. Renove seu acesso por apenas R$ 7,90!'
           : hasAnyToken
             ? 'Nenhum token válido encontrado. Verifique seu email.'
             : 'Email não encontrado em nossa base de dados.',

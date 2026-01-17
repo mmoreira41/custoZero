@@ -91,6 +91,20 @@ export function useAuth(): UseAuthReturn {
         setEmail(result.email);
         setIsValid(true);
         setIsDevMode(false);
+
+        // Salvar informações de lifetime e expiração no localStorage
+        if (result.isLifetime) {
+          localStorage.setItem('custozero_is_lifetime', 'true');
+          localStorage.removeItem('custozero_expires_at');
+        } else {
+          localStorage.setItem('custozero_is_lifetime', 'false');
+          if (result.expiresAt) {
+            localStorage.setItem('custozero_expires_at', result.expiresAt);
+          }
+        }
+        if (result.createdAt) {
+          localStorage.setItem('custozero_created_at', result.createdAt);
+        }
       }
 
     } catch (err) {

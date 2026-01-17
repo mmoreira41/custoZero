@@ -31,6 +31,8 @@ interface ValidateTokenResponse {
   valid: boolean;
   email?: string;
   createdAt?: string;
+  expiresAt?: string | null;
+  isLifetime?: boolean;
   error?: string;
   expired?: boolean;
 }
@@ -39,7 +41,8 @@ interface AccessToken {
   email: string;
   token: string;
   used: boolean;
-  expires_at: string;
+  is_lifetime: boolean;
+  expires_at: string | null;
   created_at: string;
 }
 
@@ -101,7 +104,7 @@ serve(async (req: Request) => {
 
     const { data: tokenData, error: selectError } = await supabase
       .from('access_tokens')
-      .select('email, token, used, expires_at, created_at')
+      .select('email, token, used, is_lifetime, expires_at, created_at')
       .eq('token', token)
       .single();
 
@@ -119,8 +122,7 @@ serve(async (req: Request) => {
 
     const accessToken = tokenData as AccessToken;
     const now = new Date();
-    const createdAt = new Date(accessToken.created_at);
-    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+    const isLifetime = accessToken.is_lifetime === true;
 
     // ========================================================================
     // 4. VERIFICAR SE TOKEN JÁ FOI MARCADO COMO USADO
@@ -131,7 +133,7 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           valid: false,
-          error: 'Seu passe livre já foi utilizado. Renove por R$ 7,00!',
+          error: 'Seu passe livre já foi utilizado. Renove por R$ 7,90!',
           expired: true
         }),
         {
@@ -142,18 +144,19 @@ serve(async (req: Request) => {
     }
 
     // ========================================================================
-    // 5. VERIFICAR SE TOKEN ESTÁ DENTRO DA JANELA DE 24H (PASSE LIVRE)
+    // 5. TOKEN VITALÍCIO - SEMPRE VÁLIDO
     // ========================================================================
 
-    if (hoursSinceCreation < PASS_DURATION_HOURS) {
-      // Token válido e dentro das 24h - NÃO marca como usado
-      console.log(`Token valid (${hoursSinceCreation.toFixed(1)}h old): ${token} for ${accessToken.email}`);
+    if (isLifetime) {
+      console.log(`💎 LIFETIME token valid: ${token} for ${accessToken.email}`);
 
       return new Response(
         JSON.stringify({
           valid: true,
           email: accessToken.email,
           createdAt: accessToken.created_at,
+          expiresAt: null,
+          isLifetime: true,
           expired: false
         } as ValidateTokenResponse),
         {
@@ -164,10 +167,47 @@ serve(async (req: Request) => {
     }
 
     // ========================================================================
-    // 6. TOKEN EXPIROU (>24H) - MARCAR COMO USADO
+    // 6. TOKEN TEMPORÁRIO - VERIFICAR EXPIRAÇÃO
     // ========================================================================
 
-    console.log(`Token expired (${hoursSinceCreation.toFixed(1)}h old): ${token} - marking as used`);
+    let isExpired = false;
+
+    if (accessToken.expires_at) {
+      // Usar expires_at se disponível
+      const expiresAt = new Date(accessToken.expires_at);
+      isExpired = now.getTime() > expiresAt.getTime();
+    } else {
+      // Fallback: calcular baseado em created_at + 24h
+      const createdAt = new Date(accessToken.created_at);
+      const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+      isExpired = hoursSinceCreation >= PASS_DURATION_HOURS;
+    }
+
+    if (!isExpired) {
+      // Token válido - NÃO marca como usado
+      console.log(`Token valid: ${token} for ${accessToken.email}`);
+
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          email: accessToken.email,
+          createdAt: accessToken.created_at,
+          expiresAt: accessToken.expires_at,
+          isLifetime: false,
+          expired: false
+        } as ValidateTokenResponse),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // ========================================================================
+    // 7. TOKEN EXPIROU - MARCAR COMO USADO
+    // ========================================================================
+
+    console.log(`Token expired: ${token} - marking as used`);
 
     await supabase
       .from('access_tokens')
@@ -177,7 +217,7 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         valid: false,
-        error: 'Seu passe livre de 24h expirou. Renove por R$ 7,00!',
+        error: 'Seu passe livre expirou. Renove por R$ 7,90!',
         expired: true
       } as ValidateTokenResponse),
       {

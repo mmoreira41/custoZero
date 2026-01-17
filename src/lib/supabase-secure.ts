@@ -18,14 +18,19 @@ import { supabase } from './supabase';
 export interface ValidateTokenResponse {
   valid: boolean;
   email?: string;
+  createdAt?: string;
+  expiresAt?: string | null;
+  isLifetime?: boolean;
   error?: string;
+  expired?: boolean;
 }
 
 export interface AccessToken {
   email: string;
   token: string;
   used: boolean;
-  expires_at: string;
+  is_lifetime: boolean;
+  expires_at: string | null;
 }
 
 // ============================================================================
@@ -140,11 +145,17 @@ export async function validateTokenDirect(
  * - Se falhar, tenta acesso direto (dev mode)
  *
  * @param token - Token UUID
- * @returns Objeto com valid e email
+ * @returns Objeto com valid, email, isLifetime, expiresAt, createdAt
  */
 export async function validateToken(
   token: string
-): Promise<{ valid: boolean; email: string | null }> {
+): Promise<{
+  valid: boolean;
+  email: string | null;
+  isLifetime?: boolean;
+  expiresAt?: string | null;
+  createdAt?: string;
+}> {
   // Verificar se Supabase está configurado
   const hasSupabaseConfig =
     import.meta.env.VITE_SUPABASE_URL &&
@@ -153,13 +164,13 @@ export async function validateToken(
   // Dev mode: skip validation
   if (!hasSupabaseConfig) {
     console.log('🔧 DEV MODE: Supabase not configured, skipping validation');
-    return { valid: true, email: 'dev@example.com' };
+    return { valid: true, email: 'dev@example.com', isLifetime: false };
   }
 
   // Dev tokens
   if (token?.startsWith('dev-') || token?.startsWith('test-')) {
     console.log('🔧 DEV MODE: Dev token detected, skipping validation');
-    return { valid: true, email: 'dev@example.com' };
+    return { valid: true, email: 'dev@example.com', isLifetime: false };
   }
 
   // Tentar Edge Function primeiro (seguro)
@@ -167,10 +178,16 @@ export async function validateToken(
   const secureResult = await validateTokenSecure(token);
 
   if (secureResult.valid) {
-    console.log('✅ Token validated via Edge Function');
+    console.log('✅ Token validated via Edge Function', {
+      isLifetime: secureResult.isLifetime,
+      expiresAt: secureResult.expiresAt,
+    });
     return {
       valid: true,
       email: secureResult.email || null,
+      isLifetime: secureResult.isLifetime,
+      expiresAt: secureResult.expiresAt,
+      createdAt: secureResult.createdAt,
     };
   }
 
@@ -183,6 +200,7 @@ export async function validateToken(
     return {
       valid: true,
       email: directResult.email,
+      isLifetime: false,
     };
   }
 
