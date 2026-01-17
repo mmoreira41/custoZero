@@ -28,17 +28,35 @@ interface CaktoWebhookPayload {
     product?: {
       id: string;
       name: string;
+      price?: number; // Preço do produto em centavos
     };
     amount?: number; // Valor em centavos
+    value?: number;  // Alguns webhooks usam "value"
+    total?: number;  // Ou "total"
     currency?: string;
     created_at?: string;
   };
+  // Campos na raiz (alguns webhooks enviam assim)
+  amount?: number;
+  value?: number;
+  total?: number;
 }
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Evita erro se o método for GET (navegador) ou outro diferente de POST
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ message: 'Envie um POST com JSON' }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   try {
@@ -54,6 +72,16 @@ serve(async (req) => {
 
     // Parse do payload do webhook
     const rawBody = await req.text();
+    if (!rawBody?.trim()) {
+      return new Response(
+        JSON.stringify({ message: 'Body vazio' }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const payload: CaktoWebhookPayload = JSON.parse(rawBody);
 
     // Log do payload completo para debug
@@ -66,7 +94,26 @@ serve(async (req) => {
     const customerEmail = payload.data?.customer?.email; // Email (em data.customer.email)
     const customerName = payload.data?.customer?.name || 'Cliente'; // Nome
     const productName = payload.data?.product?.name || 'Diagnóstico Financeiro CustoZero';
-    const amount = payload.data?.amount || 0; // Valor em centavos
+
+    // Tentar extrair o valor de múltiplos campos possíveis
+    // A Cakto pode enviar em diferentes formatos
+    const rawAmount =
+      payload.data?.amount ||
+      payload.data?.value ||
+      payload.data?.total ||
+      payload.data?.product?.price ||
+      payload.amount ||
+      payload.value ||
+      payload.total ||
+      0;
+
+    // Converter para centavos se necessário (valores > 1000 provavelmente já estão em centavos)
+    // Valores como 7.90 ou 47.00 precisam ser multiplicados por 100
+    let amount = rawAmount;
+    if (rawAmount > 0 && rawAmount < 1000) {
+      // Provavelmente é em reais, converter para centavos
+      amount = Math.round(rawAmount * 100);
+    }
 
     console.log('📥 Cakto webhook received:', {
       event,
@@ -75,7 +122,8 @@ serve(async (req) => {
       email: customerEmail,
       name: customerName,
       product: productName,
-      amount: amount,
+      rawAmount: rawAmount,
+      amountInCents: amount,
     });
 
     // Validar se é um evento de compra aprovada
@@ -347,16 +395,56 @@ serve(async (req) => {
     // ========================================
     // CASO 3: Outro valor (primeira compra padrão ou valor desconhecido)
     // ========================================
-    console.log('📦 Processing standard purchase (unknown amount or first purchase)');
-
-    // Gerar token único (UUID)
-    const token = crypto.randomUUID();
+    console.log('📦 Processing standard purchase (unknown amount or first purchase)', { amount });
 
     // Calcular data de expiração (24 horas para passe livre)
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
-    // Salvar token no banco
+    // Se já existe um token para este email, ATUALIZAR em vez de criar novo
+    if (existingUserToken) {
+      console.log('📝 Updating existing token for standard purchase');
+
+      const { error: updateError } = await supabase
+        .from('access_tokens')
+        .update({
+          used: false,
+          expires_at: expiresAt.toISOString(),
+          order_id: transactionId,
+          customer_name: customerName,
+        })
+        .eq('id', existingUserToken.id);
+
+      if (updateError) {
+        console.error('❌ Error updating token:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to update token', details: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('✅ Token UPDATED for standard purchase:', {
+        email: normalizedEmail,
+        token: existingUserToken.token,
+        transaction_id: transactionId,
+        expires_at: expiresAt.toISOString(),
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          redirect_url: `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`,
+          token: existingUserToken.token,
+          expires_at: expiresAt.toISOString(),
+          message: 'Token updated successfully',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Não existe token, criar novo
+    const token = crypto.randomUUID();
+
     const { error: insertError } = await supabase
       .from('access_tokens')
       .insert({
@@ -382,7 +470,7 @@ serve(async (req) => {
 
     const processingUrl = `${appUrl}/processando?email=${encodeURIComponent(normalizedEmail)}`;
 
-    console.log('✅ Token created successfully:', {
+    console.log('✅ Token CREATED for standard purchase:', {
       email: normalizedEmail,
       token,
       transaction_id: transactionId,
@@ -412,7 +500,7 @@ serve(async (req) => {
         message: error instanceof Error ? error.message : 'Unknown error'
       }),
       {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );

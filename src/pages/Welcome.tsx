@@ -1,10 +1,11 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { CheckCircle, Clock, Zap, ArrowRight } from 'lucide-react'
+import { CheckCircle, Clock, Zap, ArrowRight, Gem, Infinity, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import ExpirationTimer from '@/components/ExpirationTimer'
 
-const steps = [
+// Steps para usuários com passe de 24h
+const stepsTemporary = [
   {
     icon: CheckCircle,
     title: 'Bem-vindo ao CustoZero!',
@@ -28,11 +29,37 @@ const steps = [
   },
 ]
 
+// Steps para usuários vitalícios
+const stepsLifetime = [
+  {
+    icon: Gem,
+    title: 'Você é Premium!',
+    description: 'Parabéns! Você agora tem acesso vitalício ao CustoZero.',
+    color: 'text-emerald-500',
+    bgColor: 'bg-emerald-100',
+  },
+  {
+    icon: Infinity,
+    title: 'Diagnósticos ilimitados',
+    description: 'Faça quantos diagnósticos quiser, para sempre. Sem limites!',
+    color: 'text-teal-500',
+    bgColor: 'bg-teal-100',
+  },
+  {
+    icon: Star,
+    title: 'Economia garantida',
+    description: 'Acompanhe sua evolução financeira e economize cada vez mais.',
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-100',
+  },
+]
+
 export default function Welcome() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token')
   const [currentStep, setCurrentStep] = useState(0)
+  const [isLifetime, setIsLifetime] = useState(false)
 
   useEffect(() => {
     // Validate token
@@ -41,6 +68,13 @@ export default function Welcome() {
       navigate('/acesso')
       return
     }
+
+    // Check if user has lifetime access
+    const lifetimeFlag = localStorage.getItem('custozero_is_lifetime')
+    setIsLifetime(lifetimeFlag === 'true')
+
+    // Get the appropriate steps
+    const steps = lifetimeFlag === 'true' ? stepsLifetime : stepsTemporary
 
     // Auto-advance steps for visual effect
     const interval = setInterval(() => {
@@ -54,6 +88,9 @@ export default function Welcome() {
     return () => clearInterval(interval)
   }, [token, navigate])
 
+  // Get steps based on access type
+  const steps = isLifetime ? stepsLifetime : stepsTemporary
+
   const handleStart = () => {
     const storedToken = localStorage.getItem('custozero_token') || token
     navigate(`/diagnostico?token=${storedToken}`)
@@ -64,23 +101,40 @@ export default function Welcome() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className={`min-h-screen ${isLifetime ? 'bg-gradient-to-br from-emerald-50 via-white to-teal-50' : 'bg-gradient-to-br from-blue-50 via-white to-purple-50'}`}>
       <ExpirationTimer onExpire={handleExpire} />
 
       <div className="flex items-center justify-center min-h-[calc(100vh-48px)] p-4">
         <div className="max-w-lg w-full">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
-              <CheckCircle className="w-4 h-4" />
-              Acesso liberado
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Pronto para economizar?
-            </h1>
-            <p className="text-gray-600">
-              Veja como funciona em 3 passos simples
-            </p>
+            {isLifetime ? (
+              <>
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 px-4 py-2 rounded-full text-sm font-medium mb-4 border border-emerald-200">
+                  <Gem className="w-4 h-4" />
+                  Acesso Vitalício Ativado
+                </div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  Bem-vindo ao time Premium!
+                </h1>
+                <p className="text-gray-600">
+                  Você agora tem acesso ilimitado para sempre
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+                  <CheckCircle className="w-4 h-4" />
+                  Acesso liberado
+                </div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  Pronto para economizar?
+                </h1>
+                <p className="text-gray-600">
+                  Veja como funciona em 3 passos simples
+                </p>
+              </>
+            )}
           </div>
 
           {/* Steps */}
@@ -120,15 +174,21 @@ export default function Welcome() {
           <Button
             onClick={handleStart}
             size="lg"
-            className="w-full py-6 text-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            className={`w-full py-6 text-lg ${
+              isLifetime
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
+            }`}
           >
-            Começar Diagnóstico
+            {isLifetime ? 'Iniciar Diagnóstico Premium' : 'Começar Diagnóstico'}
             <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
 
           {/* Footer note */}
           <p className="text-center text-sm text-gray-500 mt-4">
-            Leva menos de 5 minutos para completar
+            {isLifetime
+              ? 'Aproveite seu acesso ilimitado!'
+              : 'Leva menos de 5 minutos para completar'}
           </p>
         </div>
       </div>

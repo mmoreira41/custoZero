@@ -30,12 +30,15 @@ export function Report() {
 
   const handleRestart = () => {
     if (confirm('Tem certeza que deseja fazer um novo diagnóstico? Seus dados atuais serão perdidos.')) {
-      reset();
       // Manter o token do localStorage para permitir refazer durante 24h
       const token = localStorage.getItem('custozero_token');
       if (token) {
-        navigate(`/diagnostico?token=${token}`);
+        // Evita flash na landing: não reseta o estado antes do redirect externo
+        window.location.replace(
+          `https://www.finnko.com.br/diagnostico?token=${encodeURIComponent(token)}`
+        );
       } else {
+        reset();
         navigate('/acesso');
       }
     }
