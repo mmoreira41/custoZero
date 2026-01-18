@@ -47,6 +47,9 @@ export function useAuth(): UseAuthReturn {
         console.log('💡 Token:', token);
         console.log('📧 Email: dev@example.com (mock)');
         if (!cancelled) {
+          if (token) {
+            localStorage.setItem('custozero_token', token);
+          }
           setIsDevMode(true);
           setEmail('dev@example.com');
           setIsValid(true);
@@ -88,6 +91,7 @@ export function useAuth(): UseAuthReturn {
 
       // Token válido - atualizar state apenas se não foi cancelado
       if (!cancelled) {
+        localStorage.setItem('custozero_token', token);
         setEmail(result.email);
         setIsValid(true);
         setIsDevMode(false);

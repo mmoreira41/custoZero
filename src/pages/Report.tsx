@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Download, RotateCcw, AlertCircle, ExternalLink, Zap, Sparkles } from 'lucide-react';
 import { useDiagnosticStore } from '@/store/diagnosticStore';
@@ -16,7 +17,15 @@ import ExpirationTimer from '@/components/ExpirationTimer';
 
 export function Report() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { result, reset } = useDiagnosticStore();
+  const urlToken = searchParams.get('token');
+
+  useEffect(() => {
+    if (urlToken) {
+      localStorage.setItem('custozero_token', urlToken);
+    }
+  }, [urlToken]);
 
   // Se não houver resultado, redirecionar para home
   if (!result) {
@@ -29,18 +38,23 @@ export function Report() {
   };
 
   const handleRestart = () => {
-    if (confirm('Tem certeza que deseja fazer um novo diagnóstico? Seus dados atuais serão perdidos.')) {
-      // Manter o token do localStorage para permitir refazer durante 24h
-      const token = localStorage.getItem('custozero_token');
-      if (token) {
-        // Evita flash na landing: não reseta o estado antes do redirect externo
-        window.location.replace(
-          `https://www.finnko.com.br/diagnostico?token=${encodeURIComponent(token)}`
-        );
-      } else {
-        reset();
-        navigate('/acesso');
-      }
+    if (!confirm('Tem certeza que deseja fazer um novo diagnóstico? Seus dados atuais serão perdidos.')) {
+      return;
+    }
+
+    // Limpar estado do diagnóstico anterior
+    reset();
+
+    // Usar token local ou da URL
+    const storedToken = localStorage.getItem('custozero_token');
+    const tokenToUse = urlToken || storedToken;
+
+    if (tokenToUse) {
+      // Navegar para Welcome com o token para reiniciar o fluxo
+      navigate(`/welcome?token=${tokenToUse}`);
+    } else {
+      // Sem token, voltar para acesso
+      navigate('/acesso');
     }
   };
 

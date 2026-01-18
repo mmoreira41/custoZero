@@ -178,7 +178,16 @@ export function Questionnaire() {
   };
 
   const handleLoadingComplete = () => {
-    navigate('/relatorio');
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    const storedToken = localStorage.getItem('custozero_token');
+    const token = urlToken || storedToken;
+
+    if (token) {
+      navigate(`/relatorio?token=${encodeURIComponent(token)}`);
+    } else {
+      navigate('/relatorio');
+    }
   };
 
   const handleExpire = () => {

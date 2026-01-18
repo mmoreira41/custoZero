@@ -1,4 +1,5 @@
 import type { Service } from '@/types';
+import meliPlusLogo from '@/assets/pill-meliplus@3x.png';
 
 // Streaming Services
 export const streamingServices: Service[] = [
@@ -193,6 +194,18 @@ export const produtividadeServices: Service[] = [
     plans: [
       { label: 'Plus', price: 115.00 },
       { label: 'Team', price: 170.00 }
+    ]
+  },
+  {
+    id: 'gemini-advanced',
+    name: 'Gemini Advanced',
+    logo: 'https://unavatar.io/gemini.google.com',
+    avgPriceMin: 97,
+    avgPriceMax: 97,
+    cancelUrl: 'https://one.google.com/about/plans',
+    howToCancel: 'Google One > Configurações > Gerenciar assinatura > Cancelar',
+    plans: [
+      { label: 'Google One AI Premium', price: 96.99 }
     ]
   },
   {
@@ -440,7 +453,7 @@ export const marketplacesServices: Service[] = [
   {
     id: 'meli-plus',
     name: 'Meli+ (Mercado Livre)',
-    logo: 'https://http2.mlstatic.com/frontend-assets/homes-korriban/assets/images/ecosystem/logo.svg',
+    logo: meliPlusLogo,
     avgPriceMin: 18,
     avgPriceMax: 18,
     howToCancel: 'Minha conta > Meli+ > Cancelar',
