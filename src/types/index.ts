@@ -28,6 +28,7 @@ export interface Service {
   cancelUrl?: string; // URL para cancelamento direto
   howToCancel?: string; // Instruções de cancelamento
   plans?: ServicePlan[]; // Planos disponíveis (ex: Netflix Básico, Padrão, Premium)
+  isVariableCost?: boolean; // Para serviços com custo variável (ex: corridas Uber/99)
 }
 
 export interface ServiceInput {
@@ -55,6 +56,17 @@ export interface HabitInput {
   type: 'delivery' | 'transport' | 'coffee';
   frequency: number; // vezes por mês
   avgSpent: number; // gasto médio por vez
+}
+
+// Tipos de insight de transporte
+export type TransportInsightType = 'optimization' | 'waste' | 'behavior';
+
+export interface TransportInsight {
+  type: TransportInsightType;
+  title: string;
+  description: string;
+  monthlyValue: number;
+  ridesPerWeek?: number;
 }
 
 export interface DiagnosticResult {
@@ -89,6 +101,9 @@ export interface DiagnosticResult {
     realistic: number;    // 35%
     aggressive: number;   // 50%
   };
+
+  // Insights inteligentes de transporte
+  transportInsights?: TransportInsight[];
 }
 
 export interface AccessToken {

@@ -1,10 +1,6 @@
 import { Shield} from 'lucide-react'
 
-interface FooterSectionProps {
-  onAccessWithEmail: () => void
-}
-
-export function FooterSection({ onAccessWithEmail }: FooterSectionProps) {
+export function FooterSection() {
   return (
     <div className="mt-10 space-y-6">
       {/* Already a customer */}

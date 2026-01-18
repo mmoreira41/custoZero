@@ -1,22 +1,15 @@
-import { useNavigate } from 'react-router-dom'
 import { HeaderSection, PricingCard, FooterSection } from '@/components/upsell'
 
 const PAYMENT_30_DAYS = 'https://pay.cakto.com.br/38wjsj6'
 const PAYMENT_LIFETIME = 'https://pay.cakto.com.br/3cppbz2'
 
 export default function AccessExpired() {
-  const navigate = useNavigate()
-
   const handleSelect30Days = () => {
     window.location.href = PAYMENT_30_DAYS
   }
 
   const handleSelectLifetime = () => {
     window.location.href = PAYMENT_LIFETIME
-  }
-
-  const handleAccessWithEmail = () => {
-    navigate('/acesso')
   }
 
   return (
@@ -66,7 +59,7 @@ export default function AccessExpired() {
           />
         </div>
 
-        <FooterSection onAccessWithEmail={handleAccessWithEmail} />
+        <FooterSection />
       </div>
     </main>
   )

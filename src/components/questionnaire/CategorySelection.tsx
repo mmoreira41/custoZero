@@ -291,7 +291,7 @@ function ServiceCard({ service, isSelected, onToggle }: ServiceCardProps) {
             <AvatarImage
               src={imageSrc}
               alt={service.name}
-              className="object-cover"
+              className="object-contain p-2 bg-white"
               onError={handleImageError}
             />
           ) : (

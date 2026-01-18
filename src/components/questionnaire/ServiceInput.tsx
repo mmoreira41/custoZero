@@ -83,6 +83,30 @@ export function ServiceInput({ serviceIds, onComplete, onBack }: ServiceInputPro
     return initial;
   });
 
+  // Estado para serviços de custo variável (corridas)
+  const [variableCostInputs, setVariableCostInputs] = useState<Record<string, { ridesPerWeek: number; avgCostPerRide: number }>>(() => {
+    const initial: Record<string, { ridesPerWeek: number; avgCostPerRide: number }> = {};
+    serviceIds.forEach((id) => {
+      const service = getServiceById(id);
+      if (service?.isVariableCost) {
+        initial[id] = { ridesPerWeek: 0, avgCostPerRide: 0 };
+      }
+    });
+    return initial;
+  });
+
+  // Estado para valores formatados de custo variável
+  const [variableDisplayValues, setVariableDisplayValues] = useState<Record<string, { ridesPerWeek: string; avgCostPerRide: string }>>(() => {
+    const initial: Record<string, { ridesPerWeek: string; avgCostPerRide: string }> = {};
+    serviceIds.forEach((id) => {
+      const service = getServiceById(id);
+      if (service?.isVariableCost) {
+        initial[id] = { ridesPerWeek: '', avgCostPerRide: '0,00' };
+      }
+    });
+    return initial;
+  });
+
   const handleValueChange = (serviceId: string, field: 'monthlyValue' | 'frequency', value: number | UsageFrequency) => {
     setInputs((prev) => ({
       ...prev,
@@ -114,6 +138,55 @@ export function ServiceInput({ serviceIds, onComplete, onBack }: ServiceInputPro
     handleValueChange(serviceId, 'monthlyValue', price);
   };
 
+  // Handler para mudanças em serviços de custo variável
+  const handleVariableCostChange = (serviceId: string, field: 'ridesPerWeek' | 'avgCostPerRide', rawValue: string) => {
+    if (field === 'ridesPerWeek') {
+      // Apenas números inteiros
+      const numValue = parseInt(rawValue.replace(/\D/g, ''), 10) || 0;
+      const limitedValue = Math.min(numValue, 50); // Máximo 50 corridas por semana
+
+      setVariableCostInputs((prev) => {
+        const updated = {
+          ...prev,
+          [serviceId]: { ...prev[serviceId], ridesPerWeek: limitedValue }
+        };
+        // Calcular valor mensal automaticamente
+        const monthlyValue = limitedValue * updated[serviceId].avgCostPerRide * 4;
+        handleValueChange(serviceId, 'monthlyValue', monthlyValue);
+        // Auto-set frequency to 'sempre' for variable cost services
+        handleValueChange(serviceId, 'frequency', 'sempre');
+        return updated;
+      });
+
+      setVariableDisplayValues((prev) => ({
+        ...prev,
+        [serviceId]: { ...prev[serviceId], ridesPerWeek: limitedValue > 0 ? limitedValue.toString() : '' }
+      }));
+    } else {
+      // Valor em R$ (formato moeda)
+      const formatted = formatCurrency(rawValue);
+      const numericValue = parseCurrency(rawValue);
+
+      setVariableCostInputs((prev) => {
+        const updated = {
+          ...prev,
+          [serviceId]: { ...prev[serviceId], avgCostPerRide: numericValue }
+        };
+        // Calcular valor mensal automaticamente
+        const monthlyValue = updated[serviceId].ridesPerWeek * numericValue * 4;
+        handleValueChange(serviceId, 'monthlyValue', monthlyValue);
+        // Auto-set frequency to 'sempre' for variable cost services
+        handleValueChange(serviceId, 'frequency', 'sempre');
+        return updated;
+      });
+
+      setVariableDisplayValues((prev) => ({
+        ...prev,
+        [serviceId]: { ...prev[serviceId], avgCostPerRide: formatted }
+      }));
+    }
+  };
+
   const handleSubmit = () => {
     const completed = serviceIds
       .map((id) => inputs[id])
@@ -130,6 +203,22 @@ export function ServiceInput({ serviceIds, onComplete, onBack }: ServiceInputPro
 
   const allFilled = serviceIds.every((id) => {
     const input = inputs[id];
+    const service = getServiceById(id);
+
+    // Para serviços de custo variável, verificar se os campos estão preenchidos
+    if (service?.isVariableCost) {
+      const varInput = variableCostInputs[id];
+      const isValid = (
+        input &&
+        input.frequency !== undefined &&
+        varInput &&
+        varInput.ridesPerWeek > 0 &&
+        varInput.avgCostPerRide > 0
+      );
+      return isValid;
+    }
+
+    // Para serviços normais
     const isValid = (
       input &&
       input.monthlyValue !== undefined &&
@@ -137,28 +226,7 @@ export function ServiceInput({ serviceIds, onComplete, onBack }: ServiceInputPro
       input.frequency !== undefined
     );
 
-    // Debug temporário
-    if (!isValid) {
-      console.log('❌ Service not filled:', id, {
-        input,
-        monthlyValue: input?.monthlyValue,
-        frequency: input?.frequency
-      });
-    } else {
-      console.log('✅ Service filled:', id, {
-        monthlyValue: input?.monthlyValue,
-        frequency: input?.frequency
-      });
-    }
-
     return isValid;
-  });
-
-  // Debug: Mostra estado completo
-  console.log('All filled?', allFilled, {
-    serviceIds,
-    totalServices: serviceIds.length,
-    inputs: Object.keys(inputs).length
   });
 
   const FREQUENCY_OPTIONS: {
@@ -268,89 +336,146 @@ export function ServiceInput({ serviceIds, onComplete, onBack }: ServiceInputPro
                   {/* Inputs */}
                   <div className="flex flex-col gap-4 lg:flex-1">
 
-                    {/* Valor mensal */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        Valor mensal
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-medium">
-                          R$
-                        </span>
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder={placeholderValue}
-                          value={displayValues[serviceId] ?? '0,00'}
-                          onChange={(e) => handleMoneyInputChange(serviceId, e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-50 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-transparent transition-all"
-                        />
-                      </div>
-
-                      {/* Aviso de valor alto */}
-                      {input.monthlyValue !== undefined && input.monthlyValue > 10000 && (
-                        <p className="text-amber-600 dark:text-amber-500 text-xs mt-1 flex items-center gap-1">
-                          ⚠️ Valor alto detectado. Confirme se está correto.
-                        </p>
-                      )}
-
-                      {/* Badges de planos */}
-                      {service?.plans && service.plans.length > 0 && (
-                        <div className="mt-1.5 xs:mt-2 flex flex-wrap gap-1.5 xs:gap-2">
-                          {service.plans.map((plan, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => handlePlanSelect(serviceId, plan.price)}
-                              className="inline-flex items-center px-2 xs:px-3 py-1 xs:py-1.5 bg-slate-100 hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 text-[10px] xs:text-xs font-medium rounded-md transition-all cursor-pointer border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700"
-                            >
-                              {plan.label} · R$ {plan.price.toFixed(2).replace('.', ',')}
-                            </button>
-                          ))}
+                    {/* Inputs para serviços de custo variável (corridas) */}
+                    {service?.isVariableCost ? (
+                      <>
+                        {/* Média de corridas por semana */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Quantas corridas você pede por semana?
+                          </label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Ex: 5"
+                            value={variableDisplayValues[serviceId]?.ridesPerWeek ?? ''}
+                            onChange={(e) => handleVariableCostChange(serviceId, 'ridesPerWeek', e.target.value)}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-50 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-transparent transition-all"
+                          />
                         </div>
-                      )}
-                    </div>
 
-                    {/* Frequência de uso */}
-                    <div>
-                      <label className="block text-xs xs:text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        Frequência de uso
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 xs:gap-2 p-1 xs:p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                        {FREQUENCY_OPTIONS.map((option) => {
-                          const isSelected = input.frequency === option.value;
-                          const Icon = option.icon;
+                        {/* Valor médio por corrida */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Valor médio por corrida
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-medium">
+                              R$
+                            </span>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Ex: 25,00"
+                              value={variableDisplayValues[serviceId]?.avgCostPerRide ?? '0,00'}
+                              onChange={(e) => handleVariableCostChange(serviceId, 'avgCostPerRide', e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-50 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-transparent transition-all"
+                            />
+                          </div>
+                        </div>
 
-                          return (
-                            <Button
-                              key={option.value}
-                              type="button"
-                              variant="ghost"
-                              onClick={() => handleValueChange(serviceId, 'frequency', option.value)}
-                              className={`
-                                relative flex flex-col items-center justify-center gap-1 xs:gap-2 py-2 xs:py-3 px-1 xs:px-2 rounded-md text-xs font-medium transition-all duration-200 h-auto min-h-[3.5rem] xs:min-h-[4rem]
-                                ${
-                                  isSelected
-                                    ? option.color === 'rose'
-                                      ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-                                      : option.color === 'amber'
-                                        ? 'bg-amber-400 text-slate-900 shadow-lg shadow-amber-400/30'
-                                        : option.color === 'emerald'
-                                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
-                                          : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-50 shadow-md'
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
-                                }
-                              `}
-                            >
-                              <Icon className={`h-4 w-4 xs:h-5 xs:w-5 sm:h-6 sm:w-6 flex-shrink-0 ${isSelected ? '' : 'opacity-70'}`} />
-                              <span className="leading-tight text-center text-[9px] xs:text-[10px] sm:text-xs font-semibold">
-                                {option.shortLabel}
+                        {/* Cálculo automático do valor mensal */}
+                        {input.monthlyValue !== undefined && input.monthlyValue > 0 && (
+                          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
+                            <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                              <span className="font-medium">Gasto mensal estimado:</span>{' '}
+                              <span className="font-bold text-lg">
+                                R$ {input.monthlyValue.toFixed(2).replace('.', ',')}
                               </span>
-                            </Button>
-                          );
-                        })}
+                            </p>
+                            <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
+                              ({variableCostInputs[serviceId]?.ridesPerWeek} corridas/semana × R$ {variableCostInputs[serviceId]?.avgCostPerRide.toFixed(2).replace('.', ',')} × 4 semanas)
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Valor mensal padrão para assinaturas */
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                          Valor mensal
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-medium">
+                            R$
+                          </span>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder={placeholderValue}
+                            value={displayValues[serviceId] ?? '0,00'}
+                            onChange={(e) => handleMoneyInputChange(serviceId, e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-50 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-transparent transition-all"
+                          />
+                        </div>
+
+                        {/* Aviso de valor alto */}
+                        {input.monthlyValue !== undefined && input.monthlyValue > 10000 && (
+                          <p className="text-amber-600 dark:text-amber-500 text-xs mt-1 flex items-center gap-1">
+                            ⚠️ Valor alto detectado. Confirme se está correto.
+                          </p>
+                        )}
+
+                        {/* Badges de planos */}
+                        {service?.plans && service.plans.length > 0 && (
+                          <div className="mt-1.5 xs:mt-2 flex flex-wrap gap-1.5 xs:gap-2">
+                            {service.plans.map((plan, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handlePlanSelect(serviceId, plan.price)}
+                                className="inline-flex items-center px-2 xs:px-3 py-1 xs:py-1.5 bg-slate-100 hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 text-[10px] xs:text-xs font-medium rounded-md transition-all cursor-pointer border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700"
+                              >
+                                {plan.label} · R$ {plan.price.toFixed(2).replace('.', ',')}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
+
+                    {/* Frequência de uso - esconder para serviços de custo variável */}
+                    {!service?.isVariableCost && (
+                      <div>
+                        <label className="block text-xs xs:text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                          Frequência de uso
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 xs:gap-2 p-1 xs:p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                          {FREQUENCY_OPTIONS.map((option) => {
+                            const isSelected = input.frequency === option.value;
+                            const Icon = option.icon;
+
+                            return (
+                              <Button
+                                key={option.value}
+                                type="button"
+                                variant="ghost"
+                                onClick={() => handleValueChange(serviceId, 'frequency', option.value)}
+                                className={`
+                                  relative flex flex-col items-center justify-center gap-1 xs:gap-2 py-2 xs:py-3 px-1 xs:px-2 rounded-md text-xs font-medium transition-all duration-200 h-auto min-h-[3.5rem] xs:min-h-[4rem]
+                                  ${
+                                    isSelected
+                                      ? option.color === 'rose'
+                                        ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
+                                        : option.color === 'amber'
+                                          ? 'bg-amber-400 text-slate-900 shadow-lg shadow-amber-400/30'
+                                          : option.color === 'emerald'
+                                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                                            : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-50 shadow-md'
+                                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                                  }
+                                `}
+                              >
+                                <Icon className={`h-4 w-4 xs:h-5 xs:w-5 sm:h-6 sm:w-6 flex-shrink-0 ${isSelected ? '' : 'opacity-70'}`} />
+                                <span className="leading-tight text-center text-[9px] xs:text-[10px] sm:text-xs font-semibold">
+                                  {option.shortLabel}
+                                </span>
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -630,6 +630,15 @@ export const fitnessServices: Service[] = [
 // Transporte Services
 export const transporteServices: Service[] = [
   {
+    id: 'gastos-corridas',
+    name: 'Gastos com Corridas (Uber/99/Táxi)',
+    logo: 'https://cdn-icons-png.flaticon.com/512/3097/3097144.png',
+    avgPriceMin: 200,
+    avgPriceMax: 800,
+    howToCancel: 'Reduza a frequência de uso para economizar',
+    isVariableCost: true
+  },
+  {
     id: 'uber-one',
     name: 'Uber One',
     logo: 'https://unavatar.io/uber.com',

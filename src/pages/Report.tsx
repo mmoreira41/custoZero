@@ -1,7 +1,7 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Download, RotateCcw, AlertCircle, ExternalLink, Zap, Sparkles } from 'lucide-react';
+import { TrendingUp, Download, RotateCcw, AlertCircle, ExternalLink, Zap, Sparkles, Car, Lightbulb, AlertTriangle } from 'lucide-react';
 import { useDiagnosticStore } from '@/store/diagnosticStore';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -20,6 +20,7 @@ export function Report() {
   const [searchParams] = useSearchParams();
   const { result, reset } = useDiagnosticStore();
   const urlToken = searchParams.get('token');
+  const isRestarting = useRef(false);
 
   useEffect(() => {
     if (urlToken) {
@@ -27,9 +28,14 @@ export function Report() {
     }
   }, [urlToken]);
 
-  // Se não houver resultado, redirecionar para home
-  if (!result) {
+  // Se não houver resultado e não estiver reiniciando, redirecionar para home
+  if (!result && !isRestarting.current) {
     navigate('/');
+    return null;
+  }
+
+  // Se estiver reiniciando ou não tiver resultado, não renderizar nada
+  if (isRestarting.current || !result) {
     return null;
   }
 
@@ -41,6 +47,9 @@ export function Report() {
     if (!confirm('Tem certeza que deseja fazer um novo diagnóstico? Seus dados atuais serão perdidos.')) {
       return;
     }
+
+    // Marcar que estamos reiniciando para evitar redirect para home
+    isRestarting.current = true;
 
     // Limpar estado do diagnóstico anterior
     reset();
@@ -363,6 +372,91 @@ export function Report() {
                 })}
               </div>
             </Card>
+          </div>
+        </motion.section>
+      )}
+
+      {/* Transport Insights Section */}
+      {result.transportInsights && result.transportInsights.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.9 }}
+          className="px-4 py-8 md:py-12"
+        >
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <Car className="w-8 h-8 text-slate-700" />
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900">
+                Insights de Transporte
+              </h2>
+            </div>
+            <div className="space-y-4">
+              {result.transportInsights.map((insight, index) => {
+                const isOptimization = insight.type === 'optimization';
+                const isWaste = insight.type === 'waste';
+                const isBehavior = insight.type === 'behavior';
+
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 1.0 + index * 0.1 }}
+                  >
+                    <Card
+                      className={`p-5 md:p-6 border-2 ${
+                        isOptimization
+                          ? 'bg-emerald-50 border-emerald-300'
+                          : isWaste
+                            ? 'bg-rose-50 border-rose-300'
+                            : 'bg-amber-50 border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div
+                          className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            isOptimization
+                              ? 'bg-emerald-500'
+                              : isWaste
+                                ? 'bg-rose-500'
+                                : 'bg-amber-500'
+                          }`}
+                        >
+                          {isOptimization && <Lightbulb className="w-6 h-6 text-white" />}
+                          {isWaste && <AlertCircle className="w-6 h-6 text-white" />}
+                          {isBehavior && <AlertTriangle className="w-6 h-6 text-white" />}
+                        </div>
+                        <div className="flex-1">
+                          <h3
+                            className={`text-lg font-bold mb-2 ${
+                              isOptimization
+                                ? 'text-emerald-800'
+                                : isWaste
+                                  ? 'text-rose-800'
+                                  : 'text-amber-800'
+                            }`}
+                          >
+                            {insight.title}
+                          </h3>
+                          <p
+                            className={`text-sm md:text-base leading-relaxed ${
+                              isOptimization
+                                ? 'text-emerald-700'
+                                : isWaste
+                                  ? 'text-rose-700'
+                                  : 'text-amber-700'
+                            }`}
+                          >
+                            {insight.description}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         </motion.section>
       )}
